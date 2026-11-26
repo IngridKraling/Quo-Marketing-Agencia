@@ -62,6 +62,7 @@ const presupuestoSchema = z.object({
   titulo: z.string().trim().min(1, "Completá el proyecto / evento"),
   area_id: uuidOpc,
   responsable: textoOpc,
+  fecha_elaboracion: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Completá la fecha de elaboración"),
   fecha_evento: textoOpc,
   notas: textoOpc,
   lineas: z.array(lineaSchema),

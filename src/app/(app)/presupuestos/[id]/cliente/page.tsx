@@ -62,6 +62,7 @@ async function Vista({ params, searchParams }: { params: Promise<{ id: string }>
       <article className="card space-y-6 p-8 print:border-0 print:p-0">
         <header className="space-y-1">
           <h1 className="text-2xl font-semibold">Presupuesto</h1>
+          {cab.fecha_elaboracion && <p className="text-sm">Fecha: <b>{fecha(cab.fecha_elaboracion)}</b></p>}
           <p className="text-sm">Cliente: <b>{cliente}{cab.marca ? ` · ${cab.marca}` : ""}</b></p>
           <p className="text-sm">Proyecto: <b>{cab.titulo}</b>{cab.fecha_evento && <> · {fecha(cab.fecha_evento)}</>}</p>
           <p className="text-xs text-zinc-500">Referencia: {cab.codigo} · versión {version ?? cab.version}</p>
