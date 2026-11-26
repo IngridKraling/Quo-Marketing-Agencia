@@ -3,15 +3,16 @@ import { cerrarSesion } from "@/app/actions";
 
 const links = [
   { href: "/presupuestos", label: "Presupuestos" },
+  { href: "/conceptos", label: "Conceptos" },
   { href: "/clientes", label: "Clientes" },
-  { href: "/equipo", label: "Equipo y tarifas" },
+  { href: "/configuracion", label: "Configuración" },
 ];
 
 export default function AppLayout({ children }: LayoutProps<"/">) {
   return (
     <div className="min-h-screen">
-      <header className="border-b border-zinc-200 bg-white">
-        <nav className="mx-auto flex max-w-6xl flex-wrap items-center gap-4 px-4 py-3">
+      <header className="border-b border-zinc-200 bg-white print:hidden">
+        <nav className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-4 px-4 py-3">
           <span className="font-semibold">Quo · Presupuestos</span>
           {links.map((l) => (
             <Link key={l.href} href={l.href} className="text-sm text-zinc-600 hover:text-zinc-900">
@@ -23,7 +24,7 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
           </form>
         </nav>
       </header>
-      <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
+      <main className="mx-auto max-w-[1600px] px-4 py-6">{children}</main>
     </div>
   );
 }

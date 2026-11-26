@@ -1,47 +1,144 @@
 import { describe, expect, it } from "vitest";
-import { calcularTotales } from "./presupuesto-calc";
+import {
+  calcularLinea,
+  controlProyecto,
+  costoReal,
+  erroresParaAprobar,
+  estadoReal,
+  resumenPresupuesto,
+  type Linea,
+  type Parametros,
+  type RubroInfo,
+} from "./presupuesto-calc";
 
-describe("calcularTotales", () => {
-  it("aplica markup a horas y externos, y suma IVA sobre el neto", () => {
-    const t = calcularTotales({
-      horas: [
-        { horas: 10, costoHora: 5000 },
-        { horas: 4, costoHora: 8000 },
-      ],
-      externos: [{ costo: 100000 }, { costo: 50000, markupPct: 0 }],
-      markupHorasPct: 50,
-      markupExternosPct: 10,
-      ivaPct: 21,
-    });
-    expect(t.horasTotales).toBe(14);
-    expect(t.costoHoras).toBe(82000);
-    expect(t.precioHoras).toBe(123000);
-    expect(t.costoExternos).toBe(150000);
-    expect(t.precioExternos).toBe(160000);
-    expect(t.subtotal).toBe(283000);
-    expect(t.iva).toBe(59430);
-    expect(t.total).toBe(342430);
-    expect(t.costoTotal).toBe(232000);
-    expect(t.margen).toBe(51000);
-    expect(t.margenPct).toBe(18.02);
+const P: Parametros = { markupDefault: 1.4, impuestosPct: 5, margenMinimoPct: 20, toleranciaPct: 10 };
+
+const rubro = (id: string, extra: Partial<RubroInfo> = {}): RubroInfo => ({ id, nombre: id, alertaSinCotizar: false, revisarSiSeUsa: false, ...extra });
+const RUBROS = [rubro("Personal"), rubro("Logística y flete", { alertaSinCotizar: true }), rubro("Viaticos", { alertaSinCotizar: true }), rubro("Juegos"), rubro("Otros", { revisarSiSeUsa: true })];
+
+const linea = (rubroId: string, precio: number, cant: number | null, horas: number | null, dias: number | null, markupConcepto: number | null): Linea => ({
+  rubroId, precioUnitario: precio, cantidad: cant, horas, dias, markup: null, markupConcepto,
+});
+
+// Proyecto real del Excel: BTL-ROLCAR-001 (BYD · Lanzamiento).
+const ROLCAR: Linea[] = [
+  linea("Personal", 10000, 1, 5, null, 1.6), // Supervisor
+  linea("Personal", 6200, 2, 4, null, 1.6), // Ayudante armado/desarme
+  linea("Personal", 6200, 1, 6, null, 1.6), // Ayudante evento
+  linea("Personal", 9300, 1, 6, null, 1.6), // Promotoras
+  linea("Logística y flete", 100000, 1, null, null, 1.4), // Camioneta para evento
+  linea("Viaticos", 20000, 4, null, 2, 1.4), // Viáticos ayudantes
+  linea("Juegos", 30000, 1, null, null, 1.4), // Dado
+];
+
+describe("calcularLinea (fórmulas del Excel)", () => {
+  it("costo = precio × cantidad × horas × días, con vacío = 1", () => {
+    expect(calcularLinea(ROLCAR[1], P)).toMatchObject({ costo: 49600, markup: 1.6, venta: 79360, impuestos: 3968, contribucion: 25792, margenPct: 32.5 });
+    expect(calcularLinea(ROLCAR[5], P)).toMatchObject({ costo: 160000, venta: 224000, impuestos: 11200, contribucion: 52800, margenPct: 23.57 });
   });
 
-  it("devuelve ceros con un presupuesto vacío", () => {
-    const t = calcularTotales({ horas: [], externos: [], markupHorasPct: 30, markupExternosPct: 0, ivaPct: 21 });
-    expect(t.total).toBe(0);
-    expect(t.margenPct).toBe(0);
+  it("markup: el de la línea › el del concepto › el general", () => {
+    const base = linea("Juegos", 1000, 1, null, null, 1.6);
+    expect(calcularLinea(base, P).markup).toBe(1.6);
+    expect(calcularLinea({ ...base, markup: 2 }, P).markup).toBe(2);
+    expect(calcularLinea({ ...base, markupConcepto: null }, P).markup).toBe(1.4);
   });
 
-  it("redondea a centavos", () => {
-    const t = calcularTotales({
-      horas: [{ horas: 1.333, costoHora: 1000 }],
-      externos: [],
-      markupHorasPct: 0,
-      markupExternosPct: 0,
-      ivaPct: 21,
-    });
-    expect(t.subtotal).toBe(1333);
-    expect(t.iva).toBe(279.93);
-    expect(t.total).toBe(1612.93);
+  it("línea de Plan de medios con markup manual (PE-CCU-008)", () => {
+    const r = calcularLinea({ ...linea("Plan de medios", 3480195.65, 1, null, null, 1.4), markup: 1.460240349 }, P);
+    expect(r.venta).toBe(5081922.11);
+    expect(r.impuestos).toBe(254096.11);
+    expect(r.contribucion).toBe(1347630.35);
+  });
+});
+
+describe("resumenPresupuesto", () => {
+  it("da los mismos totales que el Excel para BTL-ROLCAR-001", () => {
+    const r = resumenPresupuesto(ROLCAR, RUBROS, P);
+    expect(r.costo).toBe(482600);
+    expect(r.venta).toBe(714160);
+    expect(r.contribucion).toBe(195852);
+    expect(r.margenPct).toBe(27.42);
+    expect(r.markupPromedio).toBe(1.48);
+  });
+
+  it("alertas por rubro: sin cotizar, revisar Otros y margen bajo", () => {
+    const sinLogistica = ROLCAR.filter((l) => l.rubroId !== "Logística y flete");
+    const conOtros = [...sinLogistica, linea("Otros", 5000, 1, null, null, null)];
+    const r = resumenPresupuesto(conOtros, RUBROS, { ...P, margenMinimoPct: 25 });
+    const alerta = (id: string) => r.porRubro.find((x) => x.rubro.id === id)?.alerta;
+    expect(alerta("Logística y flete")).toBe("Sin cotizar: confirmar si corresponde");
+    expect(alerta("Viaticos")).toBeNull();
+    expect(alerta("Otros")).toBe("Revisar: ¿falta un rubro?");
+    expect(alerta("Juegos")).toBe("Margen bajo"); // 23,57 % < 25 %
+    expect(alerta("Personal")).toBeNull(); // 32,5 %
+  });
+
+  it("los gastos no presupuestados no suman costo ni venta", () => {
+    const r = resumenPresupuesto([...ROLCAR, { ...linea("Otros", 0, null, null, null, null), presupuestada: false, precioUnitario: null }], RUBROS, P);
+    expect(r.costo).toBe(482600);
+  });
+});
+
+describe("erroresParaAprobar", () => {
+  it("no deja aprobar con cantidad 0, sin rubro o sin precio", () => {
+    const errores = erroresParaAprobar([
+      { ...linea("Personal", 1000, 0, 8, 1, 1.6), concepto: "Promotoras" },
+      { ...linea("", 1000, 1, null, null, null), rubroId: null, concepto: "X" },
+      { ...linea("Tecnica", 0, 1, null, null, null), precioUnitario: null, concepto: "Sonido" },
+    ]);
+    expect(errores).toHaveLength(3);
+    expect(errores[1]).toContain("Promotoras");
+    expect(erroresParaAprobar(ROLCAR.map((l) => ({ ...l, concepto: "c" })))).toEqual([]);
+  });
+});
+
+describe("costos reales", () => {
+  const presup = linea("Personal", 6200, 2, 4, 1, 1.6); // 49.600
+  const real = (r: Partial<NonNullable<Linea["real"]>>) => ({ igual: false, precio: null, cantidad: null, horas: null, dias: null, monto: null, ...r });
+
+  it("pendiente si no se cargó nada", () => {
+    expect(costoReal({ ...presup, real: real({}) })).toBeNull();
+    expect(estadoReal({ ...presup, real: real({}) }, P)).toBe("pendiente");
+  });
+  it("igual a presupuesto", () => {
+    expect(costoReal({ ...presup, real: real({ igual: true }) })).toBe(49600);
+    expect(estadoReal({ ...presup, real: real({ igual: true }) }, P)).toBe("ok");
+  });
+  it("cambios puntuales: lo vacío toma el valor presupuestado", () => {
+    expect(costoReal({ ...presup, real: real({ horas: 6 }) })).toBe(74400);
+    expect(estadoReal({ ...presup, real: real({ horas: 6 }) }, P)).toBe("excedido");
+    expect(costoReal({ ...presup, real: real({ cantidad: 1 }) })).toBe(24800);
+    expect(estadoReal({ ...presup, real: real({ cantidad: 1 }) }, P)).toBe("ahorro");
+  });
+  it("el monto de factura pisa todo", () => {
+    expect(costoReal({ ...presup, real: real({ igual: true, horas: 10, monto: 50000 }) })).toBe(50000);
+    expect(estadoReal({ ...presup, real: real({ monto: 50000 }) }, P)).toBe("ok"); // +0,8 % dentro de la tolerancia
+  });
+  it("gasto no presupuestado y línea quitada", () => {
+    const extra: Linea = { rubroId: "Otros", precioUnitario: null, cantidad: null, horas: null, dias: null, markup: null, markupConcepto: null, presupuestada: false };
+    expect(estadoReal({ ...extra, real: real({}) }, P)).toBe("pendiente");
+    expect(estadoReal({ ...extra, real: real({ monto: 15000 }) }, P)).toBe("no_presupuestado");
+    expect(estadoReal({ ...presup, precioUnitario: 0, real: real({ monto: 100 }) }, P)).toBe("quitada");
+  });
+});
+
+describe("controlProyecto", () => {
+  it("compara por rubro y arma el resultado con lo facturado", () => {
+    const real = (r: Partial<NonNullable<Linea["real"]>>) => ({ igual: false, precio: null, cantidad: null, horas: null, dias: null, monto: null, ...r });
+    const lineas: Linea[] = [
+      { ...ROLCAR[0], real: real({ igual: true }) }, // 50.000
+      { ...ROLCAR[4], real: real({ monto: 130000 }) }, // flete 100.000 → 130.000: excedido
+      { ...ROLCAR[6], real: real({}) }, // pendiente
+      { rubroId: "Otros", precioUnitario: null, cantidad: null, horas: null, dias: null, markup: null, markupConcepto: null, presupuestada: false, real: real({ monto: 20000 }) },
+    ];
+    const c = controlProyecto(lineas, RUBROS, P, 300000);
+    const r = (id: string) => c.porRubro.find((x) => x.rubro.id === id)!;
+    expect(r("Logística y flete")).toMatchObject({ presupuestado: 100000, real: 130000, desvio: 30000, desvioPct: 30, control: "Excedido" });
+    expect(r("Otros")).toMatchObject({ presupuestado: 0, real: 20000, control: "No presupuestado" });
+    expect(r("Juegos").pendientes).toBe(1);
+    expect(c.pendientes).toBe(1);
+    expect(c.real).toMatchObject({ venta: 300000, costo: 200000, impuestos: 15000, contribucion: 85000, margenPct: 28.33 });
+    expect(c.presupuestado.costo).toBe(180000);
   });
 });

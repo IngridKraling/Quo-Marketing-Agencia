@@ -9,18 +9,20 @@ export function FormAccion({
   children,
   className,
   boton,
+  variante = "pri",
 }: {
   action: (prev: Resultado, form: FormData) => Promise<Resultado>;
   children?: ReactNode;
   className?: string;
   boton: string;
+  variante?: "pri" | "sec";
 }) {
   const [estado, formAction, pendiente] = useActionState(action, null);
   return (
     <form action={formAction} className={className}>
       {children}
       <div className="flex items-center gap-3">
-        <button className="btn" disabled={pendiente}>
+        <button className={variante === "sec" ? "btn-sec" : "btn"} disabled={pendiente}>
           {pendiente ? "Procesando…" : boton}
         </button>
         {estado && (

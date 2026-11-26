@@ -1,166 +1,400 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import Link from "next/link";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { guardarPresupuesto, type PresupuestoInput } from "@/app/actions";
-import { calcularTotales } from "@/lib/presupuesto-calc";
-import { pesos } from "@/lib/formato";
+import {
+  aprobarPresupuesto,
+  cambiarEstado,
+  crearNuevaVersion,
+  guardarPresupuesto,
+  type LineaInput,
+  type PresupuestoInput,
+} from "@/app/actions";
+import {
+  ESTADOS,
+  ETIQUETA_ESTADO,
+  calcularLinea,
+  estaCongelado,
+  resumenPresupuesto,
+  type Estado,
+  type Origen,
+} from "@/lib/presupuesto-calc";
+import type { Catalogo } from "@/lib/servicios/datos";
+import { decimal, pesos, porcentaje } from "@/lib/formato";
+import { CampoNumero } from "@/components/campo-numero";
+import { aLinea, lineaDesdeConcepto } from "@/lib/lineas";
 
-type Rol = { id: string; nombre: string; costo_hora: number };
-type Cliente = { id: string; nombre: string };
+const ORIGENES: { valor: Origen; etiqueta: string }[] = [
+  { valor: "proveedor", etiqueta: "Proveedor" },
+  { valor: "propio", etiqueta: "Propio" },
+  { valor: "personal", etiqueta: "Personal" },
+];
+const UNIDADES = ["Hora", "Unidad", "Día", "Jornada", "Servicio"];
 
-const ESTADOS = ["borrador", "enviado", "aprobado", "rechazado", "facturado"] as const;
+const lineaVacia = (rubroId: string | null): LineaInput => ({
+  id: crypto.randomUUID(),
+  rubro_id: rubroId,
+  concepto_id: null,
+  concepto: "",
+  observaciones: null,
+  origen: "proveedor",
+  proveedor: null,
+  unidad: null,
+  precio_unitario: null,
+  cantidad: 1,
+  horas: null,
+  dias: null,
+  markup: null,
+  markup_concepto: null,
+});
 
-export function EditorPresupuesto({ roles, clientes, inicial }: { roles: Rol[]; clientes: Cliente[]; inicial: PresupuestoInput }) {
+type Props = {
+  cat: Catalogo;
+  inicial: PresupuestoInput;
+  estado: Estado;
+  version: number;
+  codigo: string | null;
+};
+
+export function EditorPresupuesto({ cat, inicial, estado, version, codigo }: Props) {
   const [p, setP] = useState(inicial);
   const [mensaje, setMensaje] = useState<{ ok: boolean; texto: string } | null>(null);
   const [pendiente, startTransition] = useTransition();
   const router = useRouter();
+  const congelado = estaCongelado(estado);
+  const params = cat.parametros;
+
+  const conceptoPorNombre = useMemo(() => new Map(cat.conceptos.map((c) => [c.nombre.toLowerCase(), c])), [cat.conceptos]);
+  const conceptoPorId = useMemo(() => new Map(cat.conceptos.map((c) => [c.id, c])), [cat.conceptos]);
 
   const set = <K extends keyof PresupuestoInput>(k: K, v: PresupuestoInput[K]) => setP((prev) => ({ ...prev, [k]: v }));
-  const setHora = (i: number, cambios: Partial<PresupuestoInput["horas"][number]>) =>
-    set("horas", p.horas.map((h, j) => (j === i ? { ...h, ...cambios } : h)));
-  const setExterno = (i: number, cambios: Partial<PresupuestoInput["externos"][number]>) =>
-    set("externos", p.externos.map((h, j) => (j === i ? { ...h, ...cambios } : h)));
+  const setLinea = (id: string, cambios: Partial<LineaInput>) =>
+    setP((prev) => ({ ...prev, lineas: prev.lineas.map((l) => (l.id === id ? { ...l, ...cambios } : l)) }));
+  const agregar = (l: LineaInput) => setP((prev) => ({ ...prev, lineas: [...prev.lineas, l] }));
+  const quitar = (id: string) => setP((prev) => ({ ...prev, lineas: prev.lineas.filter((l) => l.id !== id) }));
 
-  const t = calcularTotales({
-    horas: p.horas.map((h) => ({ horas: Number(h.horas) || 0, costoHora: Number(h.costo_hora) || 0 })),
-    externos: p.externos.map((e) => ({ costo: Number(e.costo) || 0, markupPct: e.markup_pct })),
-    markupHorasPct: Number(p.markup_horas_pct) || 0,
-    markupExternosPct: Number(p.markup_externos_pct) || 0,
-    ivaPct: Number(p.iva_pct) || 0,
-  });
+  /** Al escribir un concepto que existe en el catálogo, se completan sus datos (como en el Excel). */
+  function cambiarConcepto(l: LineaInput, texto: string) {
+    const c = conceptoPorNombre.get(texto.trim().toLowerCase());
+    if (c && c.id !== l.concepto_id) {
+      const base = lineaDesdeConcepto(c, l.cantidad);
+      setLinea(l.id, { ...base, id: l.id, observaciones: l.observaciones, markup: l.markup });
+    } else if (!c && l.concepto_id) {
+      setLinea(l.id, { concepto: texto, concepto_id: null, markup_concepto: null });
+    } else {
+      setLinea(l.id, { concepto: texto });
+    }
+  }
 
-  function guardar() {
+  function actualizarPrecios() {
+    setP((prev) => ({
+      ...prev,
+      lineas: prev.lineas.map((l) => {
+        const c = l.concepto_id ? conceptoPorId.get(l.concepto_id) : undefined;
+        return c ? { ...l, precio_unitario: c.tarifa ?? l.precio_unitario, markup_concepto: c.markup } : l;
+      }),
+    }));
+    setMensaje({ ok: true, texto: "Precios y markups actualizados desde Conceptos. Guardá para confirmar." });
+  }
+
+  const resumen = resumenPresupuesto(p.lineas.map(aLinea), cat.rubros, params);
+
+  // Secciones: rubros del catálogo que tienen líneas, en su orden; al final, las líneas sin rubro.
+  const rubrosConLineas = cat.rubros.filter((r) => p.lineas.some((l) => l.rubro_id === r.id));
+  const sinRubro = p.lineas.filter((l) => !l.rubro_id || !cat.rubros.some((r) => r.id === l.rubro_id));
+  const rubrosLibres = cat.rubros.filter((r) => !p.lineas.some((l) => l.rubro_id === r.id));
+
+  function ejecutar(accion: () => Promise<{ ok: boolean; mensaje: string; id?: string } | null>, alTerminar?: (id?: string) => void) {
     startTransition(async () => {
-      const r = await guardarPresupuesto(p);
+      const r = await accion();
       setMensaje(r ? { ok: r.ok, texto: r.mensaje } : null);
-      if (r?.ok && r.id && !p.id) router.push(`/presupuestos/${r.id}`);
-      else router.refresh();
+      if (r?.ok) {
+        if (alTerminar) alTerminar(r.id);
+        else router.refresh();
+      }
     });
   }
 
-  const bloqueado = inicial.estado === "facturado";
+  function ordenarLineas() {
+    const orden = new Map(cat.rubros.map((r, i) => [r.id, i]));
+    return [...p.lineas].sort((a, b) => (orden.get(a.rubro_id ?? "") ?? 999) - (orden.get(b.rubro_id ?? "") ?? 999));
+  }
+
+  const guardar = () =>
+    ejecutar(
+      () => guardarPresupuesto({ ...p, lineas: ordenarLineas() }),
+      (id) => (!p.id && id ? router.push(`/presupuestos/${id}`) : router.refresh()),
+    );
+
+  const aprobar = () =>
+    ejecutar(async () => {
+      const g = await guardarPresupuesto({ ...p, lineas: ordenarLineas() });
+      if (!g?.ok || !p.id) return g;
+      return aprobarPresupuesto(p.id);
+    });
+
+  const estadosPosibles = ESTADOS.filter((e) =>
+    e === estado ||
+    (congelado ? ["en_ejecucion", "finalizado", "facturado", "cancelado"].includes(e) : ["borrador", "enviado", "rechazado", "cancelado"].includes(e)),
+  );
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
-      <fieldset disabled={bloqueado} className="space-y-6">
-        <section className="card grid gap-3 sm:grid-cols-2">
-          <label className="sm:col-span-2 text-sm">Título
-            <input className="input mt-1" value={p.titulo} onChange={(e) => set("titulo", e.target.value)} />
-          </label>
-          <label className="text-sm">Cliente
-            <select className="input mt-1" value={p.cliente_id ?? ""} onChange={(e) => set("cliente_id", e.target.value || null)}>
-              <option value="">— Elegir —</option>
-              {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-            </select>
-          </label>
-          <label className="text-sm">Estado
-            <select className="input mt-1" value={p.estado} onChange={(e) => set("estado", e.target.value as PresupuestoInput["estado"])}>
-              {ESTADOS.filter((e) => e !== "facturado" || p.estado === "facturado").map((e) => <option key={e}>{e}</option>)}
-            </select>
-          </label>
-          <label className="text-sm">Válido hasta
-            <input type="date" className="input mt-1" value={p.valido_hasta ?? ""} onChange={(e) => set("valido_hasta", e.target.value || null)} />
-          </label>
-          <label className="text-sm">Job de Connecteam (para horas reales)
-            <input className="input mt-1" value={p.connecteam_job_id ?? ""} onChange={(e) => set("connecteam_job_id", e.target.value || null)} />
-          </label>
-        </section>
+    <div className="space-y-4">
+      {congelado ? (
+        <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          🔒 Versión {version} aprobada · solo lectura. Para cambiarla, creá una nueva versión (los costos reales cargados se mantienen).
+        </p>
+      ) : (
+        <p className="text-sm text-zinc-500">Elegí el rubro, después el concepto: si está en Conceptos se completan origen, proveedor, unidad, precio y markup.</p>
+      )}
 
-        <section className="card space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="font-medium">Horas del equipo</h2>
-            <label className="text-sm">Markup %{" "}
-              <input type="number" className="input inline w-20" value={p.markup_horas_pct} onChange={(e) => set("markup_horas_pct", Number(e.target.value))} />
+      <datalist id="lista-proveedores">{cat.proveedores.map((x) => <option key={x} value={x} />)}</datalist>
+      <datalist id="lista-unidades">{UNIDADES.map((x) => <option key={x} value={x} />)}</datalist>
+      <div className="grid gap-6 2xl:grid-cols-[1fr_320px]">
+        <div className="min-w-0 space-y-4">
+          <fieldset disabled={congelado} className="card grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <label className="text-sm">Cliente
+              <select className="input mt-1" value={p.cliente_id ?? ""} onChange={(e) => set("cliente_id", e.target.value || null)} disabled={!!p.id}>
+                <option value="">— Elegir —</option>
+                {cat.clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+              </select>
             </label>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[560px]">
-              <thead><tr><th className="th">Tarea</th><th className="th">Rol</th><th className="th w-20">Horas</th><th className="th w-28">Costo hora</th><th className="th w-28 text-right">Costo</th><th /></tr></thead>
-              <tbody>
-                {p.horas.map((h, i) => (
-                  <tr key={i}>
-                    <td className="td"><input className="input" value={h.descripcion} onChange={(e) => setHora(i, { descripcion: e.target.value })} /></td>
-                    <td className="td">
-                      <select className="input" value={h.rol_id ?? ""} onChange={(e) => {
-                        const rol = roles.find((r) => r.id === e.target.value);
-                        setHora(i, { rol_id: rol?.id ?? null, costo_hora: rol ? Number(rol.costo_hora) : h.costo_hora });
-                      }}>
-                        <option value="">—</option>
-                        {roles.map((r) => <option key={r.id} value={r.id}>{r.nombre}</option>)}
-                      </select>
-                    </td>
-                    <td className="td"><input type="number" step="0.25" className="input" value={h.horas} onChange={(e) => setHora(i, { horas: Number(e.target.value) })} /></td>
-                    <td className="td"><input type="number" className="input" value={h.costo_hora} onChange={(e) => setHora(i, { costo_hora: Number(e.target.value) })} /></td>
-                    <td className="td text-right tabular-nums">{pesos((Number(h.horas) || 0) * (Number(h.costo_hora) || 0))}</td>
-                    <td className="td"><button type="button" className="text-zinc-400 hover:text-red-600" onClick={() => set("horas", p.horas.filter((_, j) => j !== i))} aria-label="Quitar">✕</button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <button type="button" className="btn-sec" onClick={() => set("horas", [...p.horas, { descripcion: "", rol_id: null, horas: 0, costo_hora: 0 }])}>+ Agregar tarea</button>
-        </section>
-
-        <section className="card space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="font-medium">Costos externos (pauta, producción, proveedores)</h2>
-            <label className="text-sm">Fee %{" "}
-              <input type="number" className="input inline w-20" value={p.markup_externos_pct} onChange={(e) => set("markup_externos_pct", Number(e.target.value))} />
+            <label className="text-sm">Marca / cliente real
+              <input className="input mt-1" value={p.marca ?? ""} onChange={(e) => set("marca", e.target.value)} />
             </label>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[480px]">
-              <thead><tr><th className="th">Concepto</th><th className="th w-32">Costo</th><th className="th w-28">Fee % propio</th><th /></tr></thead>
-              <tbody>
-                {p.externos.map((x, i) => (
-                  <tr key={i}>
-                    <td className="td"><input className="input" value={x.descripcion} onChange={(e) => setExterno(i, { descripcion: e.target.value })} /></td>
-                    <td className="td"><input type="number" className="input" value={x.costo} onChange={(e) => setExterno(i, { costo: Number(e.target.value) })} /></td>
-                    <td className="td"><input type="number" className="input" placeholder="—" value={x.markup_pct ?? ""} onChange={(e) => setExterno(i, { markup_pct: e.target.value === "" ? null : Number(e.target.value) })} /></td>
-                    <td className="td"><button type="button" className="text-zinc-400 hover:text-red-600" onClick={() => set("externos", p.externos.filter((_, j) => j !== i))} aria-label="Quitar">✕</button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <button type="button" className="btn-sec" onClick={() => set("externos", [...p.externos, { descripcion: "", costo: 0, markup_pct: null }])}>+ Agregar costo</button>
-        </section>
+            <label className="text-sm">Área
+              <select className="input mt-1" value={p.area_id ?? ""} onChange={(e) => set("area_id", e.target.value || null)} disabled={!!p.id}>
+                <option value="">— Elegir —</option>
+                {cat.areas.map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
+              </select>
+            </label>
+            <label className="text-sm sm:col-span-2">Proyecto / evento
+              <input className="input mt-1" value={p.titulo} onChange={(e) => set("titulo", e.target.value)} placeholder="Ej. Festival del Limón" />
+            </label>
+            <label className="text-sm">Fecha del evento
+              <input type="date" className="input mt-1" value={p.fecha_evento ?? ""} onChange={(e) => set("fecha_evento", e.target.value || null)} />
+            </label>
+            <label className="text-sm">Responsable
+              <input className="input mt-1" value={p.responsable ?? ""} onChange={(e) => set("responsable", e.target.value)} />
+            </label>
+            <div className="text-sm sm:col-span-2">
+              <span className="text-zinc-500">ID: </span>
+              <b>{codigo ?? "se asigna al guardar"}</b>
+              <span className="ml-3 text-zinc-500">Versión {version}</span>
+            </div>
+          </fieldset>
 
-        <section className="card">
-          <label className="text-sm">Notas
-            <textarea className="input mt-1" rows={3} value={p.notas ?? ""} onChange={(e) => set("notas", e.target.value || null)} />
-          </label>
-        </section>
-      </fieldset>
+          {rubrosConLineas.map((r) => (
+            <SeccionRubro
+              key={r.id}
+              titulo={r.nombre}
+              rubroId={r.id}
+              lineas={p.lineas.filter((l) => l.rubro_id === r.id)}
+              {...{ cat, params, congelado, setLinea, quitar, cambiarConcepto }}
+              onAgregar={() => agregar(lineaVacia(r.id))}
+            />
+          ))}
+          {sinRubro.length > 0 && (
+            <SeccionRubro
+              titulo="⚠ Sin rubro (no se puede aprobar)"
+              rubroId={null}
+              lineas={sinRubro}
+              {...{ cat, params, congelado, setLinea, quitar, cambiarConcepto }}
+              onAgregar={() => agregar(lineaVacia(null))}
+            />
+          )}
 
-      <aside className="card h-fit space-y-2 lg:sticky lg:top-4">
-        <h2 className="font-medium">Resumen</h2>
-        <Fila label={`Horas (${t.horasTotales} h)`} valor={t.precioHoras} />
-        <Fila label="Externos" valor={t.precioExternos} />
-        <Fila label="Subtotal neto" valor={t.subtotal} fuerte />
-        <div className="flex items-center justify-between text-sm">
-          <span>IVA %</span>
-          <input type="number" className="input w-20" disabled={bloqueado} value={p.iva_pct} onChange={(e) => set("iva_pct", Number(e.target.value))} />
+          {!congelado && rubrosLibres.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm text-zinc-500">Agregar rubro:</span>
+              {rubrosLibres.map((r) => (
+                <button key={r.id} type="button" className="btn-sec" onClick={() => agregar(lineaVacia(r.id))}>+ {r.nombre}</button>
+              ))}
+            </div>
+          )}
+
+          <fieldset disabled={congelado} className="card">
+            <label className="text-sm">Notas internas
+              <textarea className="input mt-1" rows={2} value={p.notas ?? ""} onChange={(e) => set("notas", e.target.value)} />
+            </label>
+          </fieldset>
         </div>
-        <Fila label="IVA" valor={t.iva} />
-        <Fila label="Total" valor={t.total} fuerte />
-        <hr className="border-zinc-200" />
-        <Fila label="Costo interno" valor={t.costoTotal} />
-        <Fila label={`Margen (${t.margenPct}%)`} valor={t.margen} />
-        {!bloqueado && <button className="btn mt-2 w-full" onClick={guardar} disabled={pendiente}>{pendiente ? "Guardando…" : "Guardar"}</button>}
-        {mensaje && <p className={`text-sm ${mensaje.ok ? "text-green-700" : "text-red-700"}`}>{mensaje.texto}</p>}
-      </aside>
+
+        <aside className="order-first grid h-fit gap-4 md:grid-cols-2 2xl:order-none 2xl:sticky 2xl:top-4 2xl:block 2xl:space-y-4">
+          <div className="card space-y-1.5">
+            <h2 className="mb-1 font-medium">Resumen</h2>
+            <Fila label="Costo total" valor={pesos(resumen.costo)} />
+            <Fila label="Venta total (neta)" valor={pesos(resumen.venta)} fuerte />
+            <Fila label={`Impuestos s/venta (${decimal(params.impuestosPct)} %)`} valor={pesos(resumen.impuestos)} />
+            <Fila label="Contribución" valor={pesos(resumen.contribucion)} fuerte />
+            <Fila
+              label="Margen de contribución"
+              valor={porcentaje(resumen.margenPct)}
+              clase={resumen.venta > 0 && resumen.margenPct < params.margenMinimoPct ? "text-red-700" : ""}
+            />
+            <Fila label="Markup promedio" valor={`× ${decimal(resumen.markupPromedio)}`} />
+
+            <div className="flex flex-col gap-2 pt-3">
+              {!congelado && <button className="btn" onClick={guardar} disabled={pendiente}>{pendiente ? "Guardando…" : "Guardar borrador"}</button>}
+              {!congelado && p.id && <button className="btn-sec" onClick={aprobar} disabled={pendiente}>Aprobar y congelar</button>}
+              {!congelado && p.lineas.some((l) => l.concepto_id) && (
+                <button className="btn-sec" onClick={actualizarPrecios} disabled={pendiente}>Actualizar precios desde Conceptos</button>
+              )}
+              {congelado && estado !== "facturado" && p.id && (
+                <button className="btn-sec" onClick={() => ejecutar(() => crearNuevaVersion(p.id!))} disabled={pendiente}>Crear nueva versión</button>
+              )}
+              {p.id && (
+                <label className="text-sm">Estado
+                  <select
+                    className="input mt-1"
+                    value={estado}
+                    disabled={pendiente}
+                    onChange={(e) => ejecutar(() => cambiarEstado(p.id!, e.target.value as Estado))}
+                  >
+                    {estadosPosibles.map((e) => <option key={e} value={e}>{ETIQUETA_ESTADO[e]}</option>)}
+                  </select>
+                </label>
+              )}
+              {p.id && (
+                <div className="flex flex-wrap gap-3 pt-1 text-sm">
+                  <Link className="underline" href={`/presupuestos/${p.id}/cliente`}>Vista cliente</Link>
+                  <Link className="underline" href={`/presupuestos/${p.id}/costos`}>Costos reales y control</Link>
+                </div>
+              )}
+            </div>
+            {mensaje && <p className={`pt-2 text-sm ${mensaje.ok ? "text-green-700" : "text-red-700"}`}>{mensaje.texto}</p>}
+          </div>
+
+          <div className="card space-y-2">
+            <h2 className="font-medium">Resumen por rubro</h2>
+            <table className="w-full text-sm">
+              <thead><tr><th className="th">Rubro</th><th className="th text-right">Venta</th><th className="th text-right">Margen</th></tr></thead>
+              <tbody>
+                {resumen.porRubro.filter((r) => r.costo > 0 || r.alerta).map((r) => (
+                  <tr key={r.rubro.id}>
+                    <td className="td">
+                      {r.rubro.nombre}
+                      {r.alerta && <div className="text-xs text-amber-700">⚠ {r.alerta}</div>}
+                    </td>
+                    <td className="td text-right tabular-nums">{pesos(r.venta)}</td>
+                    <td className="td text-right tabular-nums">{r.venta ? porcentaje(r.margenPct) : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </aside>
+      </div>
     </div>
   );
 }
 
-function Fila({ label, valor, fuerte }: { label: string; valor: number; fuerte?: boolean }) {
+function SeccionRubro({
+  titulo,
+  rubroId,
+  lineas,
+  cat,
+  params,
+  congelado,
+  setLinea,
+  quitar,
+  cambiarConcepto,
+  onAgregar,
+}: {
+  titulo: string;
+  rubroId: string | null;
+  lineas: LineaInput[];
+  cat: Catalogo;
+  params: Catalogo["parametros"];
+  congelado: boolean;
+  setLinea: (id: string, c: Partial<LineaInput>) => void;
+  quitar: (id: string) => void;
+  cambiarConcepto: (l: LineaInput, texto: string) => void;
+  onAgregar: () => void;
+}) {
+  const listaId = `conceptos-${rubroId ?? "todos"}`;
+  const conceptos = rubroId ? cat.conceptos.filter((c) => c.rubro_id === rubroId) : cat.conceptos;
+  const calc = lineas.map((l) => calcularLinea(aLinea(l), params));
+  const costo = calc.reduce((s, r) => s + r.costo, 0);
+  const venta = calc.reduce((s, r) => s + r.venta, 0);
+
   return (
-    <div className={`flex justify-between text-sm ${fuerte ? "font-semibold" : ""}`}>
+    <section className="card space-y-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="font-medium">{titulo}</h2>
+        <span className="text-sm text-zinc-500">
+          Costo <b className="tabular-nums text-zinc-900">{pesos(costo)}</b> · Venta <b className="tabular-nums text-zinc-900">{pesos(venta)}</b>
+        </span>
+      </div>
+      <datalist id={listaId}>{conceptos.map((c) => <option key={c.id} value={c.nombre} />)}</datalist>
+      <div className="-mx-4 overflow-x-auto px-4">
+        <fieldset disabled={congelado}>
+          <table className="w-full min-w-[1400px]">
+            <thead>
+              <tr>
+                <th className="th">Concepto</th>
+                <th className="th">Observaciones</th>
+                <th className="th w-28">Origen</th>
+                <th className="th w-36">Proveedor</th>
+                <th className="th w-24">Unidad</th>
+                <th className="th w-28">Precio unit.</th>
+                <th className="th w-16">Cant.</th>
+                <th className="th w-16">Horas</th>
+                <th className="th w-16">Días</th>
+                <th className="th w-28 text-right">Costo</th>
+                <th className="th w-20">Markup</th>
+                <th className="th w-28 text-right">Venta</th>
+                <th className="th w-16 text-right">Margen</th>
+                <th className="w-6" />
+              </tr>
+            </thead>
+            <tbody>
+              {lineas.map((l, i) => {
+                const r = calc[i];
+                return (
+                  <tr key={l.id} className={l.cantidad === 0 ? "bg-red-50/60" : ""}>
+                    <td className="td">
+                      <input className="input min-w-44" list={listaId} value={l.concepto} aria-label="Concepto" placeholder="Elegí o escribí" onChange={(e) => cambiarConcepto(l, e.target.value)} />
+                    </td>
+                    <td className="td"><input className="input min-w-32" value={l.observaciones ?? ""} aria-label="Observaciones" onChange={(e) => setLinea(l.id, { observaciones: e.target.value })} /></td>
+                    <td className="td">
+                      <select className="input min-w-28" value={l.origen} aria-label="Origen" onChange={(e) => setLinea(l.id, { origen: e.target.value as Origen })}>
+                        {ORIGENES.map((o) => <option key={o.valor} value={o.valor}>{o.etiqueta}</option>)}
+                      </select>
+                    </td>
+                    <td className="td"><input className="input min-w-32" list="lista-proveedores" value={l.proveedor ?? ""} aria-label="Proveedor" onChange={(e) => setLinea(l.id, { proveedor: e.target.value })} /></td>
+                    <td className="td"><input className="input min-w-24" list="lista-unidades" value={l.unidad ?? ""} aria-label="Unidad" onChange={(e) => setLinea(l.id, { unidad: e.target.value })} /></td>
+                    <td className="td"><CampoNumero valor={l.precio_unitario} etiqueta="Precio unitario" className="input min-w-28" onCambio={(v) => setLinea(l.id, { precio_unitario: v })} /></td>
+                    <td className="td"><CampoNumero valor={l.cantidad} etiqueta="Cantidad" className="input min-w-16" onCambio={(v) => setLinea(l.id, { cantidad: v })} /></td>
+                    <td className="td"><CampoNumero valor={l.horas} etiqueta="Horas" className="input min-w-16" onCambio={(v) => setLinea(l.id, { horas: v })} /></td>
+                    <td className="td"><CampoNumero valor={l.dias} etiqueta="Días" className="input min-w-16" onCambio={(v) => setLinea(l.id, { dias: v })} /></td>
+                    <td className="td text-right tabular-nums">{pesos(r.costo)}</td>
+                    <td className="td">
+                      <CampoNumero valor={l.markup} etiqueta="Markup (override)" className="input min-w-16" placeholder={decimal(l.markup_concepto ?? params.markupDefault)} onCambio={(v) => setLinea(l.id, { markup: v })} />
+                    </td>
+                    <td className="td text-right tabular-nums">{pesos(r.venta)}</td>
+                    <td className={`td text-right tabular-nums ${r.venta > 0 && r.margenPct < params.margenMinimoPct ? "text-red-700" : ""}`}>{r.venta ? porcentaje(r.margenPct) : "—"}</td>
+                    <td className="td">
+                      {!congelado && <button type="button" className="text-zinc-400 hover:text-red-600" onClick={() => quitar(l.id)} aria-label="Quitar línea">✕</button>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </fieldset>
+      </div>
+      {!congelado && <button type="button" className="btn-sec" onClick={onAgregar}>+ Agregar línea</button>}
+    </section>
+  );
+}
+
+function Fila({ label, valor, fuerte, clase = "" }: { label: string; valor: string; fuerte?: boolean; clase?: string }) {
+  return (
+    <div className={`flex justify-between gap-2 text-sm ${fuerte ? "font-semibold" : ""}`}>
       <span>{label}</span>
-      <span className="tabular-nums">{pesos(valor)}</span>
+      <span className={`tabular-nums ${clase}`}>{valor}</span>
     </div>
   );
 }

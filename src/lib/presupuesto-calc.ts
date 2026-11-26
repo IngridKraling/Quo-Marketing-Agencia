@@ -1,60 +1,231 @@
-/** Cálculo de presupuestos: horas × tarifa + costos externos, cada uno con su markup. */
+/**
+ * Cálculo de presupuestos, replicando el Excel "Presupuestos y Rentabilidad".
+ *
+ *   costo        = precio × cantidad × horas × días   (vacío = 1)
+ *   markup       = el de la línea › el del concepto › el general (multiplicador: 1.4 = +40 %)
+ *   venta        = costo × markup
+ *   impuestos    = venta × Σ impuestos s/venta activos (IIBB…)
+ *   contribución = venta − costo − impuestos;   margen % = contribución / venta
+ *
+ * Costo real de una línea: monto de factura › "igual a presupuesto" › cambios puntuales
+ * (lo que no se carga toma el valor presupuestado) › pendiente.
+ */
 
-export type LineaHoras = { horas: number; costoHora: number };
-export type LineaExterna = { costo: number; markupPct?: number | null };
+export type Origen = "propio" | "proveedor" | "personal";
 
-export type ParametrosPresupuesto = {
-  horas: LineaHoras[];
-  externos: LineaExterna[];
-  markupHorasPct: number;
-  markupExternosPct: number;
-  ivaPct: number;
+export const ESTADOS = ["borrador", "enviado", "aprobado", "en_ejecucion", "finalizado", "facturado", "rechazado", "cancelado"] as const;
+export type Estado = (typeof ESTADOS)[number];
+export const ETIQUETA_ESTADO: Record<Estado, string> = {
+  borrador: "Borrador",
+  enviado: "Enviado",
+  aprobado: "Aprobado",
+  en_ejecucion: "En ejecución",
+  finalizado: "Finalizado",
+  facturado: "Facturado",
+  rechazado: "Rechazado",
+  cancelado: "Cancelado",
+};
+/** Estados en los que el presupuesto quedó congelado (solo se cargan costos reales). */
+export const estaCongelado = (e: Estado) => e === "aprobado" || e === "en_ejecucion" || e === "finalizado" || e === "facturado";
+
+export type Parametros = {
+  markupDefault: number;
+  /** Suma de los impuestos s/venta activos, en %. */
+  impuestosPct: number;
+  margenMinimoPct: number;
+  toleranciaPct: number;
 };
 
-export type Totales = {
-  horasTotales: number;
-  costoHoras: number;
-  costoExternos: number;
-  costoTotal: number;
-  precioHoras: number;
-  precioExternos: number;
-  subtotal: number; // neto gravado (sin IVA)
-  iva: number;
-  total: number;
-  margen: number; // subtotal - costoTotal
-  margenPct: number; // margen / subtotal (0 si subtotal = 0)
+export type Real = {
+  igual: boolean;
+  precio: number | null;
+  cantidad: number | null;
+  horas: number | null;
+  dias: number | null;
+  monto: number | null;
+};
+
+export type Linea = {
+  rubroId: string | null;
+  precioUnitario: number | null;
+  cantidad: number | null;
+  horas: number | null;
+  dias: number | null;
+  markup: number | null;
+  markupConcepto: number | null;
+  /** false = gasto no presupuestado: no suma costo ni venta, solo costo real. */
+  presupuestada?: boolean;
+  real?: Real;
 };
 
 export const redondear = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+const uno = (v: number | null | undefined) => (v == null ? 1 : v);
+const pct = (parte: number, total: number) => (total === 0 ? 0 : redondear((parte / total) * 100));
 
-const conMarkup = (costo: number, pct: number) => costo * (1 + pct / 100);
+export function costoLinea(l: Linea): number {
+  if (l.presupuestada === false || l.precioUnitario == null) return 0;
+  return redondear(l.precioUnitario * uno(l.cantidad) * uno(l.horas) * uno(l.dias));
+}
 
-export function calcularTotales(p: ParametrosPresupuesto): Totales {
-  const horasTotales = p.horas.reduce((s, l) => s + l.horas, 0);
-  const costoHoras = p.horas.reduce((s, l) => s + l.horas * l.costoHora, 0);
-  const costoExternos = p.externos.reduce((s, l) => s + l.costo, 0);
-  const precioHoras = conMarkup(costoHoras, p.markupHorasPct);
-  const precioExternos = p.externos.reduce(
-    (s, l) => s + conMarkup(l.costo, l.markupPct ?? p.markupExternosPct),
-    0,
+export const markupAplicado = (l: Linea, p: Parametros) => l.markup ?? l.markupConcepto ?? p.markupDefault;
+
+export type Resultado = { costo: number; venta: number; impuestos: number; contribucion: number; margenPct: number };
+
+export function calcularLinea(l: Linea, p: Parametros): Resultado & { markup: number } {
+  const costo = costoLinea(l);
+  const markup = markupAplicado(l, p);
+  const venta = l.presupuestada === false ? 0 : redondear(costo * markup);
+  const impuestos = redondear((venta * p.impuestosPct) / 100);
+  const contribucion = redondear(venta - costo - impuestos);
+  return { costo, markup, venta, impuestos, contribucion, margenPct: pct(contribucion, venta) };
+}
+
+function sumar(rs: Resultado[]): Resultado {
+  const t = rs.reduce(
+    (a, r) => ({ costo: a.costo + r.costo, venta: a.venta + r.venta, impuestos: a.impuestos + r.impuestos, contribucion: a.contribucion + r.contribucion }),
+    { costo: 0, venta: 0, impuestos: 0, contribucion: 0 },
   );
+  const r = { costo: redondear(t.costo), venta: redondear(t.venta), impuestos: redondear(t.impuestos), contribucion: redondear(t.contribucion) };
+  return { ...r, margenPct: pct(r.contribucion, r.venta) };
+}
 
-  const subtotal = redondear(precioHoras + precioExternos);
-  const iva = redondear((subtotal * p.ivaPct) / 100);
-  const costoTotal = redondear(costoHoras + costoExternos);
-  const margen = redondear(subtotal - costoTotal);
+export type RubroInfo = { id: string; nombre: string; alertaSinCotizar: boolean; revisarSiSeUsa: boolean };
 
+export function alertaRubro(rubro: RubroInfo, r: Resultado, p: Parametros): string | null {
+  if (rubro.alertaSinCotizar) return r.costo === 0 ? "Sin cotizar: confirmar si corresponde" : null;
+  if (rubro.revisarSiSeUsa) return r.costo > 0 ? "Revisar: ¿falta un rubro?" : null;
+  if (r.venta > 0 && r.margenPct < p.margenMinimoPct) return "Margen bajo";
+  return null;
+}
+
+export function resumenPresupuesto(lineas: Linea[], rubros: RubroInfo[], p: Parametros) {
+  const calc = lineas.filter((l) => l.presupuestada !== false).map((l) => ({ l, r: calcularLinea(l, p) }));
+  const total = sumar(calc.map((c) => c.r));
+  const porRubro = rubros.map((rubro) => {
+    const r = sumar(calc.filter((c) => c.l.rubroId === rubro.id).map((c) => c.r));
+    return { rubro, ...r, alerta: alertaRubro(rubro, r, p) };
+  });
+  const sinRubro = calc.filter((c) => !c.l.rubroId || !rubros.some((r) => r.id === c.l.rubroId));
   return {
-    horasTotales: redondear(horasTotales),
-    costoHoras: redondear(costoHoras),
-    costoExternos: redondear(costoExternos),
-    costoTotal,
-    precioHoras: redondear(precioHoras),
-    precioExternos: redondear(precioExternos),
-    subtotal,
-    iva,
-    total: redondear(subtotal + iva),
-    margen,
-    margenPct: subtotal === 0 ? 0 : redondear((margen / subtotal) * 100),
+    ...total,
+    markupPromedio: total.costo === 0 ? 0 : redondear(total.venta / total.costo),
+    porRubro,
+    lineasSinRubro: sinRubro.length,
   };
 }
+
+/** Problemas que impiden aprobar (igual que el Excel). */
+export function erroresParaAprobar(lineas: (Linea & { concepto: string })[]): string[] {
+  const presup = lineas.filter((l) => l.presupuestada !== false);
+  const errores: string[] = [];
+  if (!presup.length) errores.push("El presupuesto no tiene líneas");
+  const sinRubro = presup.filter((l) => !l.rubroId).length;
+  if (sinRubro) errores.push(`Hay ${sinRubro} línea(s) sin rubro`);
+  const enCero = presup.filter((l) => l.cantidad === 0).map((l) => l.concepto);
+  if (enCero.length) errores.push(`Líneas con cantidad 0 (completalas o borralas): ${enCero.join(", ")}`);
+  const sinPrecio = presup.filter((l) => l.precioUnitario == null).map((l) => l.concepto);
+  if (sinPrecio.length) errores.push(`Líneas sin precio: ${sinPrecio.join(", ")}`);
+  return errores;
+}
+
+/* ---------- Costos reales ---------- */
+
+export type EstadoReal = "pendiente" | "ok" | "excedido" | "ahorro" | "no_presupuestado" | "quitada";
+export const ETIQUETA_ESTADO_REAL: Record<EstadoReal, string> = {
+  pendiente: "Pendiente",
+  ok: "OK",
+  excedido: "Excedido",
+  ahorro: "Ahorro",
+  no_presupuestado: "No presupuestado",
+  quitada: "Quitada del presupuesto",
+};
+
+/** Costo real de la línea, o null si todavía no se cargó nada. */
+export function costoReal(l: Linea): number | null {
+  const r = l.real;
+  if (!r) return null;
+  if (r.monto != null) return r.monto;
+  if (r.igual) return l.presupuestada === false ? null : costoLinea(l);
+  if (r.precio == null && r.cantidad == null && r.horas == null && r.dias == null) return null;
+  return redondear(
+    (r.precio ?? l.precioUnitario ?? 0) * uno(r.cantidad ?? l.cantidad) * uno(r.horas ?? l.horas) * uno(r.dias ?? l.dias),
+  );
+}
+
+export function estadoReal(l: Linea, p: Parametros): EstadoReal {
+  const real = costoReal(l);
+  if (l.presupuestada === false) return real == null ? "pendiente" : "no_presupuestado";
+  if (real == null) return "pendiente";
+  const costo = costoLinea(l);
+  if (costo === 0) return "quitada";
+  if (real > costo * (1 + p.toleranciaPct / 100)) return "excedido";
+  if (real < costo * (1 - p.toleranciaPct / 100)) return "ahorro";
+  return "ok";
+}
+
+/** Control del proyecto: presupuestado vs. real por rubro y resultado (hoja Control_Proyecto). */
+export function controlProyecto(lineas: Linea[], rubros: RubroInfo[], p: Parametros, facturado: number) {
+  const porRubro = rubros.map((rubro) => {
+    const ls = lineas.filter((l) => l.rubroId === rubro.id);
+    const presupuestado = redondear(ls.reduce((s, l) => s + costoLinea(l), 0));
+    const real = redondear(ls.reduce((s, l) => s + (costoReal(l) ?? 0), 0));
+    const pendientes = ls.filter((l) => estadoReal(l, p) === "pendiente").length;
+    const control =
+      presupuestado === 0 && real > 0 ? "No presupuestado"
+      : presupuestado > 0 && real > presupuestado * (1 + p.toleranciaPct / 100) ? "Excedido"
+      : null;
+    return { rubro, presupuestado, real, desvio: redondear(real - presupuestado), desvioPct: presupuestado === 0 ? null : pct(real - presupuestado, presupuestado), pendientes, control };
+  });
+  const costoPresup = redondear(porRubro.reduce((s, r) => s + r.presupuestado, 0));
+  const costoRealTotal = redondear(porRubro.reduce((s, r) => s + r.real, 0));
+  const resumen = resumenPresupuesto(lineas, rubros, p);
+  const impReal = redondear((facturado * p.impuestosPct) / 100);
+  const contribReal = redondear(facturado - costoRealTotal - impReal);
+  return {
+    porRubro,
+    pendientes: lineas.filter((l) => estadoReal(l, p) === "pendiente").length,
+    presupuestado: { venta: resumen.venta, costo: costoPresup, impuestos: resumen.impuestos, contribucion: resumen.contribucion, margenPct: resumen.margenPct },
+    real: { venta: redondear(facturado), costo: costoRealTotal, impuestos: impReal, contribucion: contribReal, margenPct: pct(contribReal, facturado) },
+  };
+}
+
+/* ---------- Conversión desde la base (Postgres devuelve numeric como string) ---------- */
+
+type Num = number | string | null | undefined;
+export const numONull = (v: Num) => (v == null || v === "" ? null : Number(v));
+
+export type FilaLinea = {
+  rubro_id: string | null;
+  precio_unitario: Num;
+  cantidad: Num;
+  horas: Num;
+  dias: Num;
+  markup: Num;
+  markup_concepto: Num;
+  presupuestada: boolean;
+  real_igual?: boolean;
+  real_precio?: Num;
+  real_cantidad?: Num;
+  real_horas?: Num;
+  real_dias?: Num;
+  real_monto?: Num;
+};
+
+export const lineaDesdeFila = (f: FilaLinea): Linea => ({
+  rubroId: f.rubro_id,
+  precioUnitario: numONull(f.precio_unitario),
+  cantidad: numONull(f.cantidad),
+  horas: numONull(f.horas),
+  dias: numONull(f.dias),
+  markup: numONull(f.markup),
+  markupConcepto: numONull(f.markup_concepto),
+  presupuestada: f.presupuestada,
+  real: {
+    igual: !!f.real_igual,
+    precio: numONull(f.real_precio),
+    cantidad: numONull(f.real_cantidad),
+    horas: numONull(f.real_horas),
+    dias: numONull(f.real_dias),
+    monto: numONull(f.real_monto),
+  },
+});

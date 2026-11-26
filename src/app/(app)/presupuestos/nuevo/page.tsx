@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { EditorPresupuesto } from "@/components/editor-presupuesto";
-import { rolesYClientes } from "@/lib/servicios/datos";
+import { lineaDesdeConcepto } from "@/lib/lineas";
+import { catalogo } from "@/lib/servicios/datos";
 
 export default function Page() {
   return (
@@ -14,23 +15,28 @@ export default function Page() {
 }
 
 async function Nuevo() {
-  const { roles, clientes } = await rolesYClientes();
+  const cat = await catalogo();
+  // Líneas por defecto (marcadas en Conceptos): vienen con cantidad 0 para completar o borrar.
+  const orden = new Map(cat.rubros.map((r, i) => [r.id, i]));
+  const porDefecto = cat.conceptos
+    .filter((c) => c.por_defecto)
+    .sort((a, b) => (orden.get(a.rubro_id) ?? 99) - (orden.get(b.rubro_id) ?? 99))
+    .map((c) => lineaDesdeConcepto(c, c.cantidad_def ?? 0));
   return (
     <EditorPresupuesto
-      roles={roles}
-      clientes={clientes}
+      cat={cat}
+      estado="borrador"
+      version={1}
+      codigo={null}
       inicial={{
         cliente_id: null,
+        marca: null,
         titulo: "",
-        estado: "borrador",
-        markup_horas_pct: 40,
-        markup_externos_pct: 10,
-        iva_pct: 21,
-        valido_hasta: null,
+        area_id: null,
+        responsable: null,
+        fecha_evento: null,
         notas: null,
-        connecteam_job_id: null,
-        horas: [{ descripcion: "", rol_id: null, horas: 0, costo_hora: 0 }],
-        externos: [],
+        lineas: porDefecto,
       }}
     />
   );
