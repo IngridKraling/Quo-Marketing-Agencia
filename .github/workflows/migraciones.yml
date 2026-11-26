@@ -1,14 +1,11 @@
 name: Migraciones Supabase
 
-# Aplica en Supabase las migraciones nuevas de supabase/migrations/ cada vez que llegan a main.
+# Aplica en Supabase las migraciones pendientes de supabase/migrations/.
+# DESACTIVADO el disparo automático: por ahora las migraciones se corren a mano en el SQL Editor.
+# Para reactivarlo, volver a agregar el bloque `push` (ramas main, rutas supabase/migrations/** y este archivo).
 # Necesita el secreto SUPABASE_DB_URL: la cadena "Session pooler" de Supabase (botón Connect),
 # con la contraseña de la base en lugar de [YOUR-PASSWORD]. Ver README → Migraciones automáticas.
 on:
-  push:
-    branches: [main]
-    paths:
-      - "supabase/migrations/**"
-      - ".github/workflows/migraciones.yml"
   workflow_dispatch:
 
 # Nunca dos corridas a la vez contra la misma base.

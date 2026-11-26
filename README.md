@@ -33,16 +33,14 @@ Stack: Next.js 16 (App Router) en Vercel · Supabase (Postgres + Auth) · TypeSc
    `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY` (Supabase → Project Settings → API Keys).
 3. **Local** (opcional): copiar `.env.example` a `.env.local`, `npm install` y `npm run dev`.
 
-### Migraciones automáticas
+### Migraciones
 
-Al mergear a `main` un PR que agrega archivos en `supabase/migrations/`, la action **Migraciones Supabase**
-(`.github/workflows/migraciones.yml`) los aplica en la base. Solo corre lo que todavía no figura en el historial de migraciones.
+Por ahora se aplican **a mano**: después de mergear un PR que agrega un archivo en `supabase/migrations/`,
+copiar su contenido en Supabase → SQL Editor → *New query* → *Run*.
 
-- Secreto necesario en GitHub → Settings → Secrets and variables → Actions: `SUPABASE_DB_URL`, la cadena de
-  **Session pooler** de Supabase (botón *Connect* del proyecto) con la contraseña de la base en lugar de `[YOUR-PASSWORD]`.
-- Las migraciones que se corrieron a mano antes de automatizar están en `APLICADAS_A_MANO` dentro del workflow, y se marcan
-  como aplicadas en cada corrida. Si alguna vez se corre otra a mano, agregar su versión (los 14 números del inicio del archivo) ahí.
-- Para volver a correrlo a mano: Actions → Migraciones Supabase → *Run workflow*.
+La action **Migraciones Supabase** (`.github/workflows/migraciones.yml`) puede aplicarlas sola, pero está desactivada
+hasta corregir el secreto `SUPABASE_DB_URL` (cadena *Session pooler* con la contraseña real de la base). Para reactivarla,
+volver a agregar el disparo `push` en el workflow.
 
 Las variables de Sigma y Connecteam son opcionales: sin `SIGMA_TOKEN` la app no muestra nada de Sigma.
 
