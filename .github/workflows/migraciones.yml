@@ -1,0 +1,51 @@
+name: Migraciones Supabase
+
+# Aplica en Supabase las migraciones nuevas de supabase/migrations/ cada vez que llegan a main.
+# Necesita el secreto SUPABASE_DB_URL: la cadena "Session pooler" de Supabase (botón Connect),
+# con la contraseña de la base en lugar de [YOUR-PASSWORD]. Ver README → Migraciones automáticas.
+on:
+  push:
+    branches: [main]
+    paths: ["supabase/migrations/**"]
+  workflow_dispatch:
+    inputs:
+      marcar_aplicadas:
+        description: "Versiones ya corridas a mano, separadas por espacio (solo la primera vez)"
+        required: false
+        default: ""
+
+# Nunca dos corridas a la vez contra la misma base.
+concurrency:
+  group: supabase-migraciones
+  cancel-in-progress: false
+
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      MARCAR_APLICADAS: ${{ inputs.marcar_aplicadas }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Verificar el secreto
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "::error::Falta el secreto SUPABASE_DB_URL (GitHub → Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+
+      - name: Marcar como aplicadas las migraciones corridas a mano
+        if: env.MARCAR_APLICADAS != ''
+        run: |
+          if ! [[ "$MARCAR_APLICADAS" =~ ^[0-9]{14}([[:space:]]+[0-9]{14})*[[:space:]]*$ ]]; then
+            echo "::error::Las versiones son los 14 números del inicio del nombre de cada migración, separados por espacio."
+            exit 1
+          fi
+          npx --yes supabase@3.4.0 migration repair --remote="$SUPABASE_DB_URL" --status applied $MARCAR_APLICADAS --yes
+
+      - name: Aplicar migraciones pendientes
+        run: npx --yes supabase@3.4.0 db push --remote="$SUPABASE_DB_URL" --yes

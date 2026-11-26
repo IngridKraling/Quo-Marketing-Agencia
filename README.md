@@ -33,6 +33,16 @@ Stack: Next.js 16 (App Router) en Vercel · Supabase (Postgres + Auth) · TypeSc
    `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY` (Supabase → Project Settings → API Keys).
 3. **Local** (opcional): copiar `.env.example` a `.env.local`, `npm install` y `npm run dev`.
 
+### Migraciones automáticas
+
+Al mergear a `main` un PR que agrega archivos en `supabase/migrations/`, la action **Migraciones Supabase**
+(`.github/workflows/migraciones.yml`) los aplica en la base. Solo corre lo que todavía no figura en el historial de migraciones.
+
+- Secreto necesario en GitHub → Settings → Secrets and variables → Actions: `SUPABASE_DB_URL`, la cadena de
+  **Session pooler** de Supabase (botón *Connect* del proyecto) con la contraseña de la base en lugar de `[YOUR-PASSWORD]`.
+- Si una migración se corrió a mano en el SQL Editor, hay que marcarla como aplicada: Actions → Migraciones Supabase →
+  *Run workflow*, con las versiones (los 14 números del inicio del archivo) separadas por espacio.
+
 Las variables de Sigma y Connecteam son opcionales: sin `SIGMA_TOKEN` la app no muestra nada de Sigma.
 
 ## Estructura
