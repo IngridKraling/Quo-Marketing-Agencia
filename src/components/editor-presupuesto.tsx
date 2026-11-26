@@ -249,8 +249,15 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo }: Pro
         <aside className="order-first grid h-fit gap-4 md:grid-cols-2 2xl:order-none 2xl:sticky 2xl:top-4 2xl:block 2xl:space-y-4">
           <div className="card space-y-1.5">
             <h2 className="mb-1 font-medium">Resumen</h2>
+            {/* Lo que se le pasa al cliente: bien a la vista. */}
+            <div className="mb-3 rounded-lg bg-emerald-600 px-4 py-3 text-white shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-100">Precio de venta al cliente</p>
+              <p className="text-3xl font-bold leading-tight tabular-nums">{pesos(resumen.venta)}</p>
+              <p className="text-xs text-emerald-100">
+                Neto, sin IVA · Con IVA ({decimal(params.ivaPct)} %): <b className="tabular-nums text-white">{pesos(conIva(resumen.venta, params.ivaPct))}</b>
+              </p>
+            </div>
             <Fila label="Costo total" valor={pesos(resumen.costo)} />
-            <Fila label="Venta total (neta)" valor={pesos(resumen.venta)} fuerte />
             <Fila label={`Impuestos s/venta (${decimal(params.impuestosPct)} %)`} valor={pesos(resumen.impuestos)} />
             <Fila label="Contribución" valor={pesos(resumen.contribucion)} fuerte />
             <Fila
@@ -421,6 +428,12 @@ function SeccionRubro({
     </section>
   );
 }
+
+/** Igual que en la vista cliente: IVA redondeado a centavos sobre el subtotal. */
+const conIva = (neto: number, ivaPct: number) => {
+  const subtotal = Math.round(neto * 100) / 100;
+  return subtotal + Math.round(subtotal * ivaPct) / 100;
+};
 
 function Fila({ label, valor, fuerte, clase = "" }: { label: string; valor: string; fuerte?: boolean; clase?: string }) {
   return (
