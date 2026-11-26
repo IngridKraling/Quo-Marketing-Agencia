@@ -12,8 +12,8 @@ export default function Page() {
         {sigma && <FormAccion action={sincronizarClientes} boton="Sincronizar desde Sigma" variante="sec" />}
       </div>
       <p className="text-sm text-zinc-500">
-        El código se usa en el ID del proyecto (BTL-<b>CCU</b>-001). Las marcas activas aparecen en el desplegable “Marca / cliente real”;
-        si un cliente no tiene marcas, ese campo queda para escribir.
+        El código se usa en el ID del proyecto (BTL-<b>CCU</b>-001). Las marcas activas aparecen en el desplegable “Marca / cliente real”,
+        siempre con “OTROS” como última opción (no hace falta cargarla).
       </p>
       <Suspense fallback={<p className="text-sm text-zinc-500">Cargando…</p>}>
         <Listado sigma={sigma} />

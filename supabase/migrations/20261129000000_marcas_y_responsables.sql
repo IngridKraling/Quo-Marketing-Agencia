@@ -37,11 +37,11 @@ insert into public.clientes (nombre, codigo) values
   ('OTROS', 'OTROS')
 on conflict (codigo) do update set nombre = excluded.nombre, activo = true;
 
--- Gemsa, Rolcar y Levite no son clientes: son del grupo económico Romar.
--- Sus presupuestos pasan a Romar con esa marca (si no tenían otra) y se borran como clientes.
+-- Gemsa y Rolcar no son clientes: son marcas del grupo Romar. Levite es marca de Aguas de Origen.
+-- Sus presupuestos pasan a ese cliente con esa marca (si no tenían otra) y se borran como clientes.
 -- El ID de esos presupuestos (ej. BTL-GEMSA-001) no cambia.
 update public.presupuestos p
-set cliente_id = (select id from public.clientes where codigo = 'ROMAR'),
+set cliente_id = (select id from public.clientes where codigo = case when c.codigo = 'LEVITE' then 'ADO' else 'ROMAR' end),
     marca = coalesce(nullif(trim(p.marca), ''), upper(c.nombre))
 from public.clientes c
 where p.cliente_id = c.id and c.codigo in ('GEMSA', 'ROLCAR', 'LEVITE');
@@ -49,6 +49,7 @@ where p.cliente_id = c.id and c.codigo in ('GEMSA', 'ROLCAR', 'LEVITE');
 delete from public.clientes where codigo in ('GEMSA', 'ROLCAR', 'LEVITE');
 
 -- ---------- Marcas ----------
+-- "OTROS" no se carga: la app la agrega siempre como última opción en todos los clientes.
 insert into public.marcas (cliente_id, nombre)
 select c.id, m.nombre
 from (values
@@ -66,11 +67,11 @@ from (values
   ('ROMAR', 'TEILEN'),
   ('ROMAR', 'GEMSA'),
   ('ROMAR', 'ROLCAR'),
-  ('ROMAR', 'LEVITE'),
   ('ROMAR', 'BROOK MOTORS'),
   ('ROMAR', 'BYD'),
   ('ROMAR', 'MATSU'),
-  ('ROMAR', 'JEEP')
+  ('ROMAR', 'JEEP'),
+  ('ADO', 'LEVITE')
 ) as m(codigo, nombre)
 join public.clientes c on c.codigo = m.codigo
 on conflict (cliente_id, nombre) do nothing;

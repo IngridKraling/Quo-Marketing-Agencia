@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { numONull, type Origen, type Parametros, type RubroInfo } from "@/lib/presupuesto-calc";
+import { alfabetico, type Marca } from "@/lib/opciones";
 
 export type Concepto = {
   id: string;
@@ -17,7 +18,6 @@ export type Concepto = {
   dias_def: number | null;
 };
 export type Opcion = { id: string; nombre: string };
-export type Marca = { cliente_id: string; nombre: string };
 export type Catalogo = {
   parametros: Parametros & { ivaPct: number };
   rubros: RubroInfo[];
@@ -29,8 +29,6 @@ export type Catalogo = {
   responsables: string[];
 };
 
-/** Orden alfabético A → Z en español (ignora mayúsculas y acentos). */
-export const alfabetico = (a: string, b: string) => a.localeCompare(b, "es", { sensitivity: "base" });
 
 export const UNIDADES = ["Hora", "Unidad", "Día", "Jornada", "Servicio"];
 

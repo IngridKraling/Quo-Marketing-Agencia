@@ -21,6 +21,7 @@ import {
   type Origen,
 } from "@/lib/presupuesto-calc";
 import type { Catalogo } from "@/lib/servicios/datos";
+import { opcionesMarca as marcasDelCliente } from "@/lib/opciones";
 import { decimal, pesos, porcentaje } from "@/lib/formato";
 import { CampoNumero } from "@/components/campo-numero";
 import { aLinea, lineaDesdeConcepto } from "@/lib/lineas";
@@ -99,16 +100,15 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo }: Pro
   }
 
   // Marcas del cliente elegido. Si el valor guardado ya no está en la lista (dato viejo o marca desactivada), se agrega para no perderlo.
-  const marcasDe = (clienteId: string | null) => cat.marcas.filter((m) => m.cliente_id === clienteId).map((m) => m.nombre);
-  const marcas = marcasDe(p.cliente_id);
+  // "OTROS" va siempre al final.
+  const marcas = marcasDelCliente(cat.marcas, p.cliente_id);
   const opcionesMarca = p.marca && !marcas.includes(p.marca) ? [p.marca, ...marcas] : marcas;
   const opcionesResponsable = p.responsable && !cat.responsables.includes(p.responsable) ? [p.responsable, ...cat.responsables] : cat.responsables;
 
   function cambiarCliente(clienteId: string | null) {
     setP((prev) => {
-      const nuevas = marcasDe(clienteId);
-      // Si el cliente nuevo tiene marcas y la elegida no es de ese cliente, se limpia.
-      const marca = nuevas.length && prev.marca && !nuevas.includes(prev.marca) ? null : prev.marca;
+      // Si la marca elegida no es del cliente nuevo, se limpia.
+      const marca = prev.marca && !marcasDelCliente(cat.marcas, clienteId).includes(prev.marca) ? null : prev.marca;
       return { ...prev, cliente_id: clienteId, marca };
     });
   }
@@ -176,14 +176,10 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo }: Pro
               </select>
             </label>
             <label className="text-sm">Marca / cliente real
-              {opcionesMarca.length ? (
-                <select className="input mt-1" value={p.marca ?? ""} onChange={(e) => set("marca", e.target.value || null)}>
-                  <option value="">— Elegir —</option>
-                  {opcionesMarca.map((m) => <option key={m} value={m}>{m}</option>)}
-                </select>
-              ) : (
-                <input className="input mt-1" value={p.marca ?? ""} onChange={(e) => set("marca", e.target.value)} />
-              )}
+              <select className="input mt-1" value={p.marca ?? ""} onChange={(e) => set("marca", e.target.value || null)} disabled={!p.cliente_id}>
+                <option value="">{p.cliente_id ? "— Elegir —" : "— Elegí primero el cliente —"}</option>
+                {opcionesMarca.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
             </label>
             <label className="text-sm">Área
               <select className="input mt-1" value={p.area_id ?? ""} onChange={(e) => set("area_id", e.target.value || null)} disabled={!!p.id}>
