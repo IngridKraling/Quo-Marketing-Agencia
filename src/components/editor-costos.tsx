@@ -15,6 +15,7 @@ import {
   type RubroInfo,
 } from "@/lib/presupuesto-calc";
 import { CampoNumero } from "@/components/campo-numero";
+import { CampoPesos } from "@/components/campo-pesos";
 import { decimal, pesos, porcentaje } from "@/lib/formato";
 
 /** Línea con lo presupuestado (solo lectura) y los campos de costo real (editables). */
@@ -177,12 +178,12 @@ export function EditorCostos({
                         <td className="td"><CampoNumero valor={f.real_cantidad} etiqueta="Cantidad real" className="input min-w-16" placeholder={f.cantidad != null ? decimal(f.cantidad) : ""} onCambio={(v) => set(f.id, { real_cantidad: v })} /></td>
                         <td className="td"><CampoNumero valor={f.real_horas} etiqueta="Horas reales" className="input min-w-16" placeholder={f.horas != null ? decimal(f.horas) : ""} onCambio={(v) => set(f.id, { real_horas: v })} /></td>
                         <td className="td"><CampoNumero valor={f.real_dias} etiqueta="Días reales" className="input min-w-16" placeholder={f.dias != null ? decimal(f.dias) : ""} onCambio={(v) => set(f.id, { real_dias: v })} /></td>
-                        <td className="td"><CampoNumero valor={f.real_precio} etiqueta="Precio real" className="input min-w-28" placeholder={f.precio_unitario != null ? decimal(f.precio_unitario) : ""} onCambio={(v) => set(f.id, { real_precio: v })} /></td>
+                        <td className="td"><CampoPesos valor={f.real_precio} etiqueta="Precio real" className="input min-w-32" placeholder={f.precio_unitario != null ? pesos(f.precio_unitario) : ""} onCambio={(v) => set(f.id, { real_precio: v })} /></td>
                       </>
                     ) : (
                       <td className="td" colSpan={4} />
                     )}
-                    <td className="td"><CampoNumero valor={f.real_monto} etiqueta="Monto real (factura)" className="input min-w-28" onCambio={(v) => set(f.id, { real_monto: v })} /></td>
+                    <td className="td"><CampoPesos valor={f.real_monto} etiqueta="Monto real (factura)" className="input min-w-32" onCambio={(v) => set(f.id, { real_monto: v })} /></td>
                     <td className="td text-right font-medium tabular-nums">{real == null ? "—" : pesos(real)}</td>
                     <td className={`td text-right tabular-nums ${real != null && real - presupuestado > 0 ? "text-red-700" : "text-green-700"}`}>
                       {real == null ? "" : `${real - presupuestado > 0 ? "+" : ""}${pesos(real - presupuestado)}`}

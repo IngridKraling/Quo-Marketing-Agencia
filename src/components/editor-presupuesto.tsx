@@ -24,7 +24,8 @@ import type { Catalogo } from "@/lib/servicios/datos";
 import { opcionesMarca as marcasDelCliente } from "@/lib/opciones";
 import { decimal, pesos, porcentaje } from "@/lib/formato";
 import { CampoNumero } from "@/components/campo-numero";
-import { aLinea, lineaDesdeConcepto } from "@/lib/lineas";
+import { CampoPesos } from "@/components/campo-pesos";
+import { aLinea, lineaDesdeConcepto, usaHoras } from "@/lib/lineas";
 
 const ORIGENES: { valor: Origen; etiqueta: string }[] = [
   { valor: "proveedor", etiqueta: "Proveedor" },
@@ -388,10 +389,17 @@ function SeccionRubro({
                       </select>
                     </td>
                     <td className="td"><input className="input min-w-32" list="lista-proveedores" value={l.proveedor ?? ""} aria-label="Proveedor" onChange={(e) => setLinea(l.id, { proveedor: e.target.value })} /></td>
-                    <td className="td"><input className="input min-w-24" list="lista-unidades" value={l.unidad ?? ""} aria-label="Unidad" onChange={(e) => setLinea(l.id, { unidad: e.target.value })} /></td>
-                    <td className="td"><CampoNumero valor={l.precio_unitario} etiqueta="Precio unitario" className="input min-w-28" onCambio={(v) => setLinea(l.id, { precio_unitario: v })} /></td>
+                    <td className="td"><input className="input min-w-24" list="lista-unidades" value={l.unidad ?? ""} aria-label="Unidad" onChange={(e) => setLinea(l.id, usaHoras(e.target.value) ? { unidad: e.target.value } : { unidad: e.target.value, horas: null })} /></td>
+                    <td className="td"><CampoPesos valor={l.precio_unitario} etiqueta="Precio unitario" className="input min-w-32" onCambio={(v) => setLinea(l.id, { precio_unitario: v })} /></td>
                     <td className="td"><CampoNumero valor={l.cantidad} etiqueta="Cantidad" className="input min-w-16" onCambio={(v) => setLinea(l.id, { cantidad: v })} /></td>
-                    <td className="td"><CampoNumero valor={l.horas} etiqueta="Horas" className="input min-w-16" onCambio={(v) => setLinea(l.id, { horas: v })} /></td>
+                    <td className="td">
+                      {/* Por unidad no se cargan horas (si una línea vieja tiene horas distintas de 1, se siguen mostrando). */}
+                      {usaHoras(l.unidad) || (l.horas != null && l.horas !== 1) ? (
+                        <CampoNumero valor={l.horas} etiqueta="Horas" className="input min-w-16" onCambio={(v) => setLinea(l.id, { horas: v })} />
+                      ) : (
+                        <span className="block min-w-16 text-center text-zinc-300" title="Por unidad: solo cantidad y días">—</span>
+                      )}
+                    </td>
                     <td className="td"><CampoNumero valor={l.dias} etiqueta="Días" className="input min-w-16" onCambio={(v) => setLinea(l.id, { dias: v })} /></td>
                     <td className="td text-right tabular-nums">{pesos(r.costo)}</td>
                     <td className="td">
