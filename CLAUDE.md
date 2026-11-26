@@ -8,4 +8,5 @@
 - Sigma: ver doc en `https://sigma.sig2k.com/quomkt@sigma/api/v10/help?format=md`. `ImportFactura` devuelve 500 en
   errores de validación; las reglas de consistencia están replicadas en `src/lib/sigma/factura.ts`.
 - Cambios de esquema: nueva migración en `supabase/migrations/`, nunca editar una ya aplicada.
+  Se aplican solas al mergear a `main` (`.github/workflows/migraciones.yml`); no correrlas a mano en el SQL Editor.
 - Antes de un PR: `npm run lint && npm run typecheck && npm test && npm run build`.
