@@ -10,6 +10,8 @@ Stack: Next.js 16 (App Router) en Vercel · Supabase (Postgres + Auth) · TypeSc
 - **Conceptos**: la base de todo lo que se presupuesta (rubro, unidad, origen Propio / Proveedor / Personal, tarifa de costo,
   proveedor habitual, markup propio, “por defecto”). La migración trae precargado el catálogo de la planilla.
 - **Presupuesto**: cabecera (cliente, marca, área, proyecto/evento, fecha de elaboración, fecha del evento, responsable) y líneas por rubro.
+  Cliente, marca y responsable son desplegables (A → Z). Las marcas dependen del cliente y se editan en **Clientes**; si el cliente
+  no tiene marcas, el campo queda libre. Los responsables se editan en **Configuración**.
   El ID se asigna solo: `<prefijo del área>-<código del cliente>-<correlativo>` (ej. `BTL-CCU-001`).
   - costo = precio × cantidad × horas × días (vacío = 1)
   - markup = el de la línea › el del concepto › el general (multiplicador: 1,4 = +40 %)

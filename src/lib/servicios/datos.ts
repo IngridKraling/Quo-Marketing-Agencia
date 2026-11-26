@@ -17,6 +17,7 @@ export type Concepto = {
   dias_def: number | null;
 };
 export type Opcion = { id: string; nombre: string };
+export type Marca = { cliente_id: string; nombre: string };
 export type Catalogo = {
   parametros: Parametros & { ivaPct: number };
   rubros: RubroInfo[];
@@ -24,7 +25,12 @@ export type Catalogo = {
   proveedores: string[];
   areas: Opcion[];
   clientes: Opcion[];
+  marcas: Marca[];
+  responsables: string[];
 };
+
+/** Orden alfabético A → Z en español (ignora mayúsculas y acentos). */
+export const alfabetico = (a: string, b: string) => a.localeCompare(b, "es", { sensitivity: "base" });
 
 export const UNIDADES = ["Hora", "Unidad", "Día", "Jornada", "Servicio"];
 
@@ -45,13 +51,15 @@ export async function parametros(): Promise<Parametros & { ivaPct: number }> {
 /** Todo lo que necesitan el editor y la carga de costos reales. */
 export async function catalogo(): Promise<Catalogo> {
   const supabase = await createClient();
-  const [params, rubros, conceptos, proveedores, areas, clientes] = await Promise.all([
+  const [params, rubros, conceptos, proveedores, areas, clientes, marcas, responsables] = await Promise.all([
     parametros(),
     supabase.from("rubros").select("id, nombre, alerta_sin_cotizar, revisar_si_se_usa").eq("activo", true).order("orden"),
     supabase.from("conceptos").select("*, proveedores(nombre)").eq("activo", true).order("nombre"),
     supabase.from("proveedores").select("nombre").eq("activo", true).order("nombre"),
     supabase.from("areas").select("id, nombre").eq("activo", true).order("orden"),
     supabase.from("clientes").select("id, nombre").eq("activo", true).order("nombre"),
+    supabase.from("marcas").select("cliente_id, nombre").eq("activo", true).order("nombre"),
+    supabase.from("responsables").select("nombre").eq("activo", true).order("nombre"),
   ]);
   return {
     parametros: params,
@@ -72,6 +80,8 @@ export async function catalogo(): Promise<Catalogo> {
     })),
     proveedores: (proveedores.data ?? []).map((p) => p.nombre),
     areas: areas.data ?? [],
-    clientes: clientes.data ?? [],
+    clientes: (clientes.data ?? []).sort((a, b) => alfabetico(a.nombre, b.nombre)),
+    marcas: (marcas.data ?? []).sort((a, b) => alfabetico(a.nombre, b.nombre)),
+    responsables: (responsables.data ?? []).map((r) => r.nombre).sort(alfabetico),
   };
 }
