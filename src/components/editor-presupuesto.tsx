@@ -257,7 +257,11 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo }: Pro
                 Neto, sin IVA · Con IVA ({decimal(params.ivaPct)} %): <b className="tabular-nums text-white">{pesos(conIva(resumen.venta, params.ivaPct))}</b>
               </p>
             </div>
-            <Fila label="Costo total" valor={pesos(resumen.costo)} />
+            {/* Costo total: destacado, pero un escalón por debajo del precio de venta. */}
+            <div className="mb-2 flex items-baseline justify-between gap-2 rounded-lg border border-zinc-300 bg-zinc-100 px-4 py-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-zinc-600">Costo total</span>
+              <span className="text-xl font-bold tabular-nums text-zinc-900">{pesos(resumen.costo)}</span>
+            </div>
             <Fila label={`Impuestos s/venta (${decimal(params.impuestosPct)} %)`} valor={pesos(resumen.impuestos)} />
             <Fila label="Contribución" valor={pesos(resumen.contribucion)} fuerte />
             <Fila
