@@ -33,7 +33,6 @@ export type Parametros = {
   /** Suma de los impuestos s/venta activos, en %. */
   impuestosPct: number;
   margenMinimoPct: number;
-  toleranciaPct: number;
 };
 
 export type Real = {
@@ -152,14 +151,14 @@ export function costoReal(l: Linea): number | null {
   );
 }
 
-export function estadoReal(l: Linea, p: Parametros): EstadoReal {
+export function estadoReal(l: Linea): EstadoReal {
   const real = costoReal(l);
   if (l.presupuestada === false) return real == null ? "pendiente" : "no_presupuestado";
   if (real == null) return "pendiente";
   const costo = costoLinea(l);
   if (costo === 0) return "quitada";
-  if (real > costo * (1 + p.toleranciaPct / 100)) return "excedido";
-  if (real < costo * (1 - p.toleranciaPct / 100)) return "ahorro";
+  if (real > costo) return "excedido";
+  if (real < costo) return "ahorro";
   return "ok";
 }
 
@@ -169,11 +168,8 @@ export function controlProyecto(lineas: Linea[], rubros: RubroInfo[], p: Paramet
     const ls = lineas.filter((l) => l.rubroId === rubro.id);
     const presupuestado = redondear(ls.reduce((s, l) => s + costoLinea(l), 0));
     const real = redondear(ls.reduce((s, l) => s + (costoReal(l) ?? 0), 0));
-    const pendientes = ls.filter((l) => estadoReal(l, p) === "pendiente").length;
-    const control =
-      presupuestado === 0 && real > 0 ? "No presupuestado"
-      : presupuestado > 0 && real > presupuestado * (1 + p.toleranciaPct / 100) ? "Excedido"
-      : null;
+    const pendientes = ls.filter((l) => estadoReal(l) === "pendiente").length;
+    const control = presupuestado === 0 && real > 0 ? "No presupuestado" : null;
     return { rubro, presupuestado, real, desvio: redondear(real - presupuestado), desvioPct: presupuestado === 0 ? null : pct(real - presupuestado, presupuestado), pendientes, control };
   });
   const costoPresup = redondear(porRubro.reduce((s, r) => s + r.presupuestado, 0));
@@ -183,7 +179,12 @@ export function controlProyecto(lineas: Linea[], rubros: RubroInfo[], p: Paramet
   const contribReal = redondear(facturado - costoRealTotal - impReal);
   return {
     porRubro,
-    pendientes: lineas.filter((l) => estadoReal(l, p) === "pendiente").length,
+    /** Desvío total de costos: real − presupuestado (positivo = se gastó de más). */
+    desvio: {
+      costo: redondear(costoRealTotal - costoPresup),
+      costoPct: costoPresup === 0 ? null : pct(costoRealTotal - costoPresup, costoPresup),
+    },
+    pendientes: lineas.filter((l) => estadoReal(l) === "pendiente").length,
     presupuestado: { venta: resumen.venta, costo: costoPresup, impuestos: resumen.impuestos, contribucion: resumen.contribucion, margenPct: resumen.margenPct },
     real: { venta: redondear(facturado), costo: costoRealTotal, impuestos: impReal, contribucion: contribReal, margenPct: pct(contribReal, facturado) },
   };

@@ -39,9 +39,6 @@ async function Contenido() {
           <label className="text-sm">Margen de contribución mínimo %
             <input name="margen_minimo_pct" type="number" step="any" min="0" defaultValue={par?.margen_minimo_pct} className="input mt-1" />
           </label>
-          <label className="text-sm">Tolerancia de desvío % (Excedido / Ahorro)
-            <input name="tolerancia_desvio_pct" type="number" step="any" min="0" defaultValue={par?.tolerancia_desvio_pct} className="input mt-1" />
-          </label>
           <label className="text-sm">IVA % (vista cliente)
             <input name="iva_pct" type="number" step="any" min="0" defaultValue={par?.iva_pct} className="input mt-1" />
           </label>

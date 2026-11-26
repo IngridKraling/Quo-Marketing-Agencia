@@ -42,6 +42,8 @@ const COLOR_ESTADO: Record<EstadoReal, string> = {
   quitada: "text-amber-700",
 };
 
+const signo = (n: number) => (n > 0 ? "+" : "");
+
 const aLinea = (f: FilaCosto): Linea => ({
   rubroId: f.rubro_id ?? null,
   precioUnitario: f.precio_unitario,
@@ -143,7 +145,7 @@ export function EditorCostos({
                 const l = lineas[i];
                 const presupuestado = costoLinea(l);
                 const real = costoReal(l);
-                const estado = estadoReal(l, params);
+                const estado = estadoReal(l);
                 return (
                   <tr key={f.id} className={f.presupuestada ? "" : "bg-amber-50/60"}>
                     <td className="td">
@@ -230,13 +232,26 @@ export function EditorCostos({
                 </tr>
               ))}
             </tbody>
+            <tfoot>
+              <tr className="font-semibold">
+                <td className="td">Total costos</td>
+                <td className="td text-right tabular-nums">{pesos(control.presupuestado.costo)}</td>
+                <td className="td text-right tabular-nums">{pesos(control.real.costo)}</td>
+                <td className={`td text-right tabular-nums ${control.desvio.costo > 0 ? "text-red-700" : control.desvio.costo < 0 ? "text-green-700" : ""}`}>
+                  {signo(control.desvio.costo)}{pesos(control.desvio.costo)}
+                  {control.desvio.costoPct != null && <span className="text-xs"> ({signo(control.desvio.costoPct)}{porcentaje(control.desvio.costoPct)})</span>}
+                </td>
+                <td className="td text-right">{control.pendientes || ""}</td>
+                <td className="td" />
+              </tr>
+            </tfoot>
           </table>
         </section>
 
         <section className="card overflow-x-auto">
           <h2 className="mb-2 font-medium">Resultado del proyecto</h2>
           <table className="w-full min-w-[420px] text-sm">
-            <thead><tr><th className="th" /><th className="th text-right">Presupuestado</th><th className="th text-right">Real</th><th className="th text-right">Desvío</th></tr></thead>
+            <thead><tr><th className="th" /><th className="th text-right">Presupuestado</th><th className="th text-right">Real</th><th className="th text-right">Desvío</th><th className="th text-right">Desvío %</th></tr></thead>
             <tbody>
               {([
                 ["Venta / facturación", presup.venta, control.real.venta],
@@ -248,17 +263,27 @@ export function EditorCostos({
                   <td className="td">{label}</td>
                   <td className="td text-right tabular-nums">{pesos(a)}</td>
                   <td className="td text-right tabular-nums">{pesos(b)}</td>
-                  <td className="td text-right tabular-nums">{pesos(b - a)}</td>
+                  <td className="td text-right tabular-nums">{signo(b - a)}{pesos(b - a)}</td>
+                  <td className="td text-right tabular-nums">{a ? `${signo(b - a)}${porcentaje(Math.round(((b - a) / Math.abs(a)) * 10000) / 100)}` : "—"}</td>
                 </tr>
               ))}
               <tr className="font-semibold">
                 <td className="td">Margen de contribución</td>
                 <td className="td text-right">{porcentaje(presup.margenPct)}</td>
                 <td className="td text-right">{facturado ? porcentaje(control.real.margenPct) : "—"}</td>
+                <td className="td text-right">{facturado ? `${signo(control.real.margenPct - presup.margenPct)}${decimal(control.real.margenPct - presup.margenPct)} pp` : ""}</td>
                 <td className="td" />
               </tr>
             </tbody>
           </table>
+          <div className={`mt-3 rounded-md p-3 ${control.desvio.costo > 0 ? "bg-red-50" : "bg-green-50"}`}>
+            <div className="text-sm text-zinc-600">Desvío total de costos (real vs. presupuestado)</div>
+            <div className={`text-2xl font-semibold tabular-nums ${control.desvio.costo > 0 ? "text-red-700" : "text-green-700"}`}>
+              {control.desvio.costoPct == null ? "—" : `${signo(control.desvio.costoPct)}${porcentaje(control.desvio.costoPct)}`}
+              <span className="ml-2 text-base font-normal">({signo(control.desvio.costo)}{pesos(control.desvio.costo)})</span>
+            </div>
+            <div className="text-xs text-zinc-500">{control.desvio.costo > 0 ? "Se gastó más de lo presupuestado" : control.desvio.costo < 0 ? "Se gastó menos de lo presupuestado" : "Igual a lo presupuestado"}</div>
+          </div>
           {control.pendientes > 0 && (
             <p className="mt-2 text-xs text-amber-700">
               Hay {control.pendientes} línea(s) pendientes: mientras tanto el costo real está incompleto y la contribución real se ve mejor de lo que es.

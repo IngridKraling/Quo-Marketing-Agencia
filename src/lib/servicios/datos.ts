@@ -38,7 +38,6 @@ export async function parametros(): Promise<Parametros & { ivaPct: number }> {
     markupDefault: Number(p?.markup_default ?? 1.4),
     impuestosPct: (imp ?? []).reduce((s, i) => s + Number(i.porcentaje), 0),
     margenMinimoPct: Number(p?.margen_minimo_pct ?? 20),
-    toleranciaPct: Number(p?.tolerancia_desvio_pct ?? 10),
     ivaPct: Number(p?.iva_pct ?? 21),
   };
 }

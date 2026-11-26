@@ -11,7 +11,7 @@ import {
   type RubroInfo,
 } from "./presupuesto-calc";
 
-const P: Parametros = { markupDefault: 1.4, impuestosPct: 5, margenMinimoPct: 20, toleranciaPct: 10 };
+const P: Parametros = { markupDefault: 1.4, impuestosPct: 5, margenMinimoPct: 20 };
 
 const rubro = (id: string, extra: Partial<RubroInfo> = {}): RubroInfo => ({ id, nombre: id, alertaSinCotizar: false, revisarSiSeUsa: false, ...extra });
 const RUBROS = [rubro("Personal"), rubro("Logística y flete", { alertaSinCotizar: true }), rubro("Viaticos", { alertaSinCotizar: true }), rubro("Juegos"), rubro("Otros", { revisarSiSeUsa: true })];
@@ -99,27 +99,28 @@ describe("costos reales", () => {
 
   it("pendiente si no se cargó nada", () => {
     expect(costoReal({ ...presup, real: real({}) })).toBeNull();
-    expect(estadoReal({ ...presup, real: real({}) }, P)).toBe("pendiente");
+    expect(estadoReal({ ...presup, real: real({}) })).toBe("pendiente");
   });
   it("igual a presupuesto", () => {
     expect(costoReal({ ...presup, real: real({ igual: true }) })).toBe(49600);
-    expect(estadoReal({ ...presup, real: real({ igual: true }) }, P)).toBe("ok");
+    expect(estadoReal({ ...presup, real: real({ igual: true }) })).toBe("ok");
   });
   it("cambios puntuales: lo vacío toma el valor presupuestado", () => {
     expect(costoReal({ ...presup, real: real({ horas: 6 }) })).toBe(74400);
-    expect(estadoReal({ ...presup, real: real({ horas: 6 }) }, P)).toBe("excedido");
+    expect(estadoReal({ ...presup, real: real({ horas: 6 }) })).toBe("excedido");
     expect(costoReal({ ...presup, real: real({ cantidad: 1 }) })).toBe(24800);
-    expect(estadoReal({ ...presup, real: real({ cantidad: 1 }) }, P)).toBe("ahorro");
+    expect(estadoReal({ ...presup, real: real({ cantidad: 1 }) })).toBe("ahorro");
   });
   it("el monto de factura pisa todo", () => {
     expect(costoReal({ ...presup, real: real({ igual: true, horas: 10, monto: 50000 }) })).toBe(50000);
-    expect(estadoReal({ ...presup, real: real({ monto: 50000 }) }, P)).toBe("ok"); // +0,8 % dentro de la tolerancia
+    expect(estadoReal({ ...presup, real: real({ monto: 50000 }) })).toBe("excedido"); // sin tolerancia: cualquier diferencia cuenta
+    expect(estadoReal({ ...presup, real: real({ monto: 49600 }) })).toBe("ok");
   });
   it("gasto no presupuestado y línea quitada", () => {
     const extra: Linea = { rubroId: "Otros", precioUnitario: null, cantidad: null, horas: null, dias: null, markup: null, markupConcepto: null, presupuestada: false };
-    expect(estadoReal({ ...extra, real: real({}) }, P)).toBe("pendiente");
-    expect(estadoReal({ ...extra, real: real({ monto: 15000 }) }, P)).toBe("no_presupuestado");
-    expect(estadoReal({ ...presup, precioUnitario: 0, real: real({ monto: 100 }) }, P)).toBe("quitada");
+    expect(estadoReal({ ...extra, real: real({}) })).toBe("pendiente");
+    expect(estadoReal({ ...extra, real: real({ monto: 15000 }) })).toBe("no_presupuestado");
+    expect(estadoReal({ ...presup, precioUnitario: 0, real: real({ monto: 100 }) })).toBe("quitada");
   });
 });
 
@@ -134,11 +135,13 @@ describe("controlProyecto", () => {
     ];
     const c = controlProyecto(lineas, RUBROS, P, 300000);
     const r = (id: string) => c.porRubro.find((x) => x.rubro.id === id)!;
-    expect(r("Logística y flete")).toMatchObject({ presupuestado: 100000, real: 130000, desvio: 30000, desvioPct: 30, control: "Excedido" });
+    expect(r("Logística y flete")).toMatchObject({ presupuestado: 100000, real: 130000, desvio: 30000, desvioPct: 30, control: null });
     expect(r("Otros")).toMatchObject({ presupuestado: 0, real: 20000, control: "No presupuestado" });
     expect(r("Juegos").pendientes).toBe(1);
     expect(c.pendientes).toBe(1);
     expect(c.real).toMatchObject({ venta: 300000, costo: 200000, impuestos: 15000, contribucion: 85000, margenPct: 28.33 });
     expect(c.presupuestado.costo).toBe(180000);
+    // Desvío total de costos: 200.000 real vs. 180.000 presupuestado.
+    expect(c.desvio).toEqual({ costo: 20000, costoPct: 11.11 });
   });
 });

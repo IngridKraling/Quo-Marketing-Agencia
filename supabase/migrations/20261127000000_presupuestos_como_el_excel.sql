@@ -18,7 +18,6 @@ create table public.parametros (
   id boolean primary key default true check (id),
   markup_default numeric(6,3) not null default 1.4 check (markup_default > 0), -- multiplicador: venta = costo × markup
   margen_minimo_pct numeric(5,2) not null default 20,     -- alerta "Margen bajo" por rubro
-  tolerancia_desvio_pct numeric(5,2) not null default 10, -- costo real: Excedido / Ahorro
   iva_pct numeric(5,2) not null default 21,               -- vista cliente
   updated_at timestamptz not null default now()
 );
@@ -33,9 +32,7 @@ create table public.impuestos_venta (
   orden integer not null default 0
 );
 insert into public.impuestos_venta (nombre, porcentaje, activo, orden) values
-  ('IIBB', 5, true, 10),
-  ('Imp. municipales', 1.2, false, 20),
-  ('Imp. al cheque', 1.2, false, 30);
+  ('IIBB', 5, true, 10);
 
 create table public.areas (
   id uuid primary key default gen_random_uuid(),

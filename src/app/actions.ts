@@ -349,7 +349,6 @@ export async function guardarParametros(_: Resultado, form: FormData): Promise<R
     .object({
       markup_default: num.positive(),
       margen_minimo_pct: num.min(0).max(100),
-      tolerancia_desvio_pct: num.min(0).max(100),
       iva_pct: num.min(0).max(100),
     })
     .safeParse(Object.fromEntries(form));

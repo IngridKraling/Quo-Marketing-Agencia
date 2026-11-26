@@ -18,10 +18,10 @@ Stack: Next.js 16 (App Router) en Vercel · Supabase (Postgres + Auth) · TypeSc
 - **Aprobar y congelar**: valida (sin cantidades en 0, sin líneas sin rubro ni precio), guarda una copia de la versión y la bloquea.
   Para cambiarla: *Crear nueva versión* (los costos reales ya cargados se mantienen).
 - **Costos reales**: por línea, “igual a presupuesto”, cambios puntuales (lo vacío toma lo presupuestado) o monto de la factura.
-  Estados: Pendiente / OK / Excedido / Ahorro / No presupuestado. Gastos no presupuestados. Control por rubro y resultado del
+  Estados: Pendiente / OK / Excedido / Ahorro / No presupuestado. Al final, el desvío total ($ y %) entre presupuestado y real. Gastos no presupuestados. Control por rubro y resultado del
   proyecto contra lo facturado.
 - **Vista cliente**: rubros y conceptos con precio de venta, subtotal, IVA y total; imprimible / PDF. Sin costos ni observaciones.
-- **Configuración**: markup general, margen mínimo, tolerancia de desvío, IVA, impuestos s/venta, rubros, áreas y proveedores.
+- **Configuración**: markup general, margen mínimo, IVA, impuestos s/venta, rubros, áreas y proveedores.
 
 ## Puesta en marcha
 
