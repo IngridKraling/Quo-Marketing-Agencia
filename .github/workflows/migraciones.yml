@@ -6,25 +6,26 @@ name: Migraciones Supabase
 on:
   push:
     branches: [main]
-    paths: ["supabase/migrations/**"]
+    paths:
+      - "supabase/migrations/**"
+      - ".github/workflows/migraciones.yml"
   workflow_dispatch:
-    inputs:
-      marcar_aplicadas:
-        description: "Versiones ya corridas a mano, separadas por espacio (solo la primera vez)"
-        required: false
-        default: ""
 
 # Nunca dos corridas a la vez contra la misma base.
 concurrency:
   group: supabase-migraciones
   cancel-in-progress: false
 
+env:
+  # Migraciones que se corrieron a mano en el SQL Editor antes de automatizar: se marcan como
+  # aplicadas (es idempotente) para que db push no intente volver a correrlas.
+  APLICADAS_A_MANO: "20261126000000 20261127000000 20261128000000"
+
 jobs:
   aplicar:
     runs-on: ubuntu-latest
     env:
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-      MARCAR_APLICADAS: ${{ inputs.marcar_aplicadas }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -39,13 +40,7 @@ jobs:
           fi
 
       - name: Marcar como aplicadas las migraciones corridas a mano
-        if: env.MARCAR_APLICADAS != ''
-        run: |
-          if ! [[ "$MARCAR_APLICADAS" =~ ^[0-9]{14}([[:space:]]+[0-9]{14})*[[:space:]]*$ ]]; then
-            echo "::error::Las versiones son los 14 números del inicio del nombre de cada migración, separados por espacio."
-            exit 1
-          fi
-          npx --yes supabase@3.4.0 migration repair --remote="$SUPABASE_DB_URL" --status applied $MARCAR_APLICADAS --yes
+        run: npx --yes supabase@3.4.0 migration repair --remote="$SUPABASE_DB_URL" --status applied $APLICADAS_A_MANO --yes
 
       - name: Aplicar migraciones pendientes
         run: npx --yes supabase@3.4.0 db push --remote="$SUPABASE_DB_URL" --yes

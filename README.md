@@ -40,8 +40,9 @@ Al mergear a `main` un PR que agrega archivos en `supabase/migrations/`, la acti
 
 - Secreto necesario en GitHub → Settings → Secrets and variables → Actions: `SUPABASE_DB_URL`, la cadena de
   **Session pooler** de Supabase (botón *Connect* del proyecto) con la contraseña de la base en lugar de `[YOUR-PASSWORD]`.
-- Si una migración se corrió a mano en el SQL Editor, hay que marcarla como aplicada: Actions → Migraciones Supabase →
-  *Run workflow*, con las versiones (los 14 números del inicio del archivo) separadas por espacio.
+- Las migraciones que se corrieron a mano antes de automatizar están en `APLICADAS_A_MANO` dentro del workflow, y se marcan
+  como aplicadas en cada corrida. Si alguna vez se corre otra a mano, agregar su versión (los 14 números del inicio del archivo) ahí.
+- Para volver a correrlo a mano: Actions → Migraciones Supabase → *Run workflow*.
 
 Las variables de Sigma y Connecteam son opcionales: sin `SIGMA_TOKEN` la app no muestra nada de Sigma.
 
