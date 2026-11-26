@@ -30,7 +30,7 @@ Stack: Next.js 16 (App Router) en Vercel · Supabase (Postgres + Auth) · TypeSc
    En Authentication → Sign In / Providers, **desactivar los registros públicos** e invitar a los usuarios de la agencia desde
    Authentication → Users. En URL Configuration, poner la URL de Vercel como Site URL y agregar `https://<tu-dominio>/auth/callback`.
 2. **Vercel**: importar el repo de GitHub y cargar en Settings → Environment Variables:
-   `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (Supabase → Project Settings → API Keys).
+   `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY` (Supabase → Project Settings → API Keys).
 3. **Local** (opcional): copiar `.env.example` a `.env.local`, `npm install` y `npm run dev`.
 
 Las variables de Sigma y Connecteam son opcionales: sin `SIGMA_TOKEN` la app no muestra nada de Sigma.
