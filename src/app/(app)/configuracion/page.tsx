@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { guardarArea, guardarImpuesto, guardarParametros, guardarProveedor, guardarRubro } from "@/app/actions";
+import { guardarArea, guardarImpuesto, guardarParametros, guardarProveedor, guardarResponsable, guardarRubro } from "@/app/actions";
 import { FormAccion } from "@/components/form-accion";
 import { createClient } from "@/lib/supabase/server";
 
@@ -20,12 +20,13 @@ const Activo = ({ valor }: { valor: boolean }) => (
 
 async function Contenido() {
   const supabase = await createClient();
-  const [{ data: par }, { data: impuestos }, { data: rubros }, { data: areas }, { data: proveedores }] = await Promise.all([
+  const [{ data: par }, { data: impuestos }, { data: rubros }, { data: areas }, { data: proveedores }, { data: responsables }] = await Promise.all([
     supabase.from("parametros").select("*").maybeSingle(),
     supabase.from("impuestos_venta").select("*").order("orden"),
     supabase.from("rubros").select("*").order("orden"),
     supabase.from("areas").select("*").order("orden"),
     supabase.from("proveedores").select("*").order("nombre"),
+    supabase.from("responsables").select("*").order("nombre"),
   ]);
 
   return (
@@ -105,6 +106,25 @@ async function Contenido() {
           <input name="nombre" placeholder="Área" required className="input w-44" />
           <input name="prefijo" placeholder="Prefijo" required className="input w-20" />
           <input name="orden" type="number" defaultValue={50} className="input w-16" aria-label="Orden" />
+        </FormAccion>
+      </section>
+
+      <section className="card space-y-3 lg:col-span-2">
+        <div>
+          <h2 className="font-medium">Responsables</h2>
+          <p className="text-sm text-zinc-500">Aparecen en el desplegable “Responsable” del presupuesto. Destildá Activo para ocultar a alguien sin perder sus presupuestos.</p>
+        </div>
+        <div className="grid gap-2 md:grid-cols-2">
+          {responsables?.map((r) => (
+            <FormAccion key={r.id} action={guardarResponsable} boton="Guardar" variante="sec" className="flex flex-wrap items-center gap-2">
+              <input type="hidden" name="id" value={r.id} />
+              <input name="nombre" defaultValue={r.nombre} className="input w-52" aria-label="Nombre" />
+              <Activo valor={r.activo} />
+            </FormAccion>
+          ))}
+        </div>
+        <FormAccion action={guardarResponsable} boton="Agregar" className="flex flex-wrap items-center gap-2 border-t border-zinc-200 pt-3">
+          <input name="nombre" placeholder="Responsable nuevo" required className="input w-52" />
         </FormAccion>
       </section>
 

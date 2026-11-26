@@ -322,6 +322,13 @@ export async function guardarProveedor(_: Resultado, form: FormData): Promise<Re
   return guardarFila("proveedores", id, { ...fila, activo: activoDe(form) }, "/configuracion", "Proveedor guardado");
 }
 
+export async function guardarResponsable(_: Resultado, form: FormData): Promise<Resultado> {
+  const parsed = z.object({ id: z.string().uuid().optional(), nombre: z.string().trim().min(1) }).safeParse(Object.fromEntries(form));
+  if (!parsed.success) return error("Completá el nombre");
+  const { id, ...fila } = parsed.data;
+  return guardarFila("responsables", id, { ...fila, activo: activoDe(form) }, "/configuracion", "Responsable guardado");
+}
+
 export async function guardarArea(_: Resultado, form: FormData): Promise<Resultado> {
   const parsed = z
     .object({
@@ -382,6 +389,15 @@ export async function guardarCliente(_: Resultado, form: FormData): Promise<Resu
     "/clientes",
     "Cliente guardado",
   );
+}
+
+export async function guardarMarca(_: Resultado, form: FormData): Promise<Resultado> {
+  const parsed = z
+    .object({ id: z.string().uuid().optional(), cliente_id: z.string().uuid(), nombre: z.string().trim().min(1, "Completá el nombre de la marca") })
+    .safeParse(Object.fromEntries(form));
+  if (!parsed.success) return error(parsed.error.issues[0]?.message ?? "Revisá los datos");
+  const { id, ...fila } = parsed.data;
+  return guardarFila("marcas", id, { ...fila, activo: activoDe(form) }, "/clientes", "Marca guardada");
 }
 
 export async function sincronizarClientes(): Promise<Resultado> {

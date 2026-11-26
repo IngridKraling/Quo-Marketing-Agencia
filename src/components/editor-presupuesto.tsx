@@ -21,6 +21,7 @@ import {
   type Origen,
 } from "@/lib/presupuesto-calc";
 import type { Catalogo } from "@/lib/servicios/datos";
+import { opcionesMarca as marcasDelCliente } from "@/lib/opciones";
 import { decimal, pesos, porcentaje } from "@/lib/formato";
 import { CampoNumero } from "@/components/campo-numero";
 import { aLinea, lineaDesdeConcepto } from "@/lib/lineas";
@@ -98,6 +99,20 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo }: Pro
     setMensaje({ ok: true, texto: "Precios y markups actualizados desde Conceptos. Guardá para confirmar." });
   }
 
+  // Marcas del cliente elegido. Si el valor guardado ya no está en la lista (dato viejo o marca desactivada), se agrega para no perderlo.
+  // "OTROS" va siempre al final.
+  const marcas = marcasDelCliente(cat.marcas, p.cliente_id);
+  const opcionesMarca = p.marca && !marcas.includes(p.marca) ? [p.marca, ...marcas] : marcas;
+  const opcionesResponsable = p.responsable && !cat.responsables.includes(p.responsable) ? [p.responsable, ...cat.responsables] : cat.responsables;
+
+  function cambiarCliente(clienteId: string | null) {
+    setP((prev) => {
+      // Si la marca elegida no es del cliente nuevo, se limpia.
+      const marca = prev.marca && !marcasDelCliente(cat.marcas, clienteId).includes(prev.marca) ? null : prev.marca;
+      return { ...prev, cliente_id: clienteId, marca };
+    });
+  }
+
   const resumen = resumenPresupuesto(p.lineas.map(aLinea), cat.rubros, params);
 
   // Secciones: rubros del catálogo que tienen líneas, en su orden; al final, las líneas sin rubro.
@@ -155,13 +170,16 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo }: Pro
         <div className="min-w-0 space-y-4">
           <fieldset disabled={congelado} className="card grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <label className="text-sm">Cliente
-              <select className="input mt-1" value={p.cliente_id ?? ""} onChange={(e) => set("cliente_id", e.target.value || null)} disabled={!!p.id}>
+              <select className="input mt-1" value={p.cliente_id ?? ""} onChange={(e) => cambiarCliente(e.target.value || null)} disabled={!!p.id}>
                 <option value="">— Elegir —</option>
                 {cat.clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
               </select>
             </label>
             <label className="text-sm">Marca / cliente real
-              <input className="input mt-1" value={p.marca ?? ""} onChange={(e) => set("marca", e.target.value)} />
+              <select className="input mt-1" value={p.marca ?? ""} onChange={(e) => set("marca", e.target.value || null)} disabled={!p.cliente_id}>
+                <option value="">{p.cliente_id ? "— Elegir —" : "— Elegí primero el cliente —"}</option>
+                {opcionesMarca.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
             </label>
             <label className="text-sm">Área
               <select className="input mt-1" value={p.area_id ?? ""} onChange={(e) => set("area_id", e.target.value || null)} disabled={!!p.id}>
@@ -179,7 +197,10 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo }: Pro
               <input type="date" className="input mt-1" value={p.fecha_evento ?? ""} onChange={(e) => set("fecha_evento", e.target.value || null)} />
             </label>
             <label className="text-sm">Responsable
-              <input className="input mt-1" value={p.responsable ?? ""} onChange={(e) => set("responsable", e.target.value)} />
+              <select className="input mt-1" value={p.responsable ?? ""} onChange={(e) => set("responsable", e.target.value || null)}>
+                <option value="">— Elegir —</option>
+                {opcionesResponsable.map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
             </label>
             <div className="text-sm sm:col-span-2">
               <span className="text-zinc-500">ID: </span>
