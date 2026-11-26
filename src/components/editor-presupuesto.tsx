@@ -303,7 +303,7 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo }: Pro
             <table className="w-full text-sm">
               <thead><tr><th className="th">Rubro</th><th className="th text-right">Venta</th><th className="th text-right">Margen</th></tr></thead>
               <tbody>
-                {resumen.porRubro.filter((r) => r.costo > 0 || r.alerta).map((r) => (
+                {resumen.porRubro.filter((r) => r.costo > 0).map((r) => (
                   <tr key={r.rubro.id}>
                     <td className="td">
                       {r.rubro.nombre}
