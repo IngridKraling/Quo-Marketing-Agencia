@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { EditorPresupuesto } from "@/components/editor-presupuesto";
 import { lineaDesdeConcepto } from "@/lib/lineas";
 import { catalogo } from "@/lib/servicios/datos";
+import { hoy } from "@/lib/formato";
 
 export default function Page() {
   return (
@@ -34,6 +35,7 @@ async function Nuevo() {
         titulo: "",
         area_id: null,
         responsable: null,
+        fecha_elaboracion: hoy(),
         fecha_evento: null,
         notas: null,
         lineas: porDefecto,

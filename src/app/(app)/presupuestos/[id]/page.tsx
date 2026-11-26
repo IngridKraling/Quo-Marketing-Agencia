@@ -51,6 +51,7 @@ async function Detalle({ params }: { params: Promise<{ id: string }> }) {
           titulo: p.titulo,
           area_id: p.area_id,
           responsable: p.responsable,
+          fecha_elaboracion: p.fecha_elaboracion,
           fecha_evento: p.fecha_evento,
           notas: p.notas,
           lineas: lineas.map((l) => ({

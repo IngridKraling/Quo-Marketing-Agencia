@@ -172,6 +172,9 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo }: Pro
             <label className="text-sm sm:col-span-2">Proyecto / evento
               <input className="input mt-1" value={p.titulo} onChange={(e) => set("titulo", e.target.value)} placeholder="Ej. Festival del Limón" />
             </label>
+            <label className="text-sm">Fecha de elaboración
+              <input type="date" required className="input mt-1" value={p.fecha_elaboracion} onChange={(e) => set("fecha_elaboracion", e.target.value)} />
+            </label>
             <label className="text-sm">Fecha del evento
               <input type="date" className="input mt-1" value={p.fecha_evento ?? ""} onChange={(e) => set("fecha_evento", e.target.value || null)} />
             </label>
