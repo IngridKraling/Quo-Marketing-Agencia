@@ -118,15 +118,23 @@ export function TablaFacturacion({ filas: iniciales }: { filas: FilaFactura[] })
   const pendientes = filas
     .filter((f) => !facturada(f) && (!cliente || f.cliente === cliente))
     .sort((a, b) => alfabetico(a.codigo ?? "", b.codigo ?? "") || a.orden - b.orden);
-  const textoOC =
-    `Hola, te paso el detalle de lo pendiente de facturar${cliente ? ` de ${cliente}` : ""} para que nos envíen la OC:\n\n` +
-    pendientes
-      .map((f) => {
-        const partes = partesPorPpto.get(f.presupuestoId) ?? 1;
-        return `• ${detalle(f)} (${f.codigo})${partes > 1 ? ` — parte ${f.orden + 1}` : ""}${f.comentarios ? ` — ${f.comentarios}` : ""}: ${pesos(f.importe)} + IVA`;
-      })
-      .join("\n") +
-    `\n\nTotal neto: ${pesos(pendientes.reduce((s, f) => s + f.importe, 0))} + IVA`;
+  // Solo el nombre del presupuesto y el monto neto.
+  const textoOC = [
+    "Buen día!",
+    "",
+    "Tenemos estos trabajos pendientes de facturación:",
+    "",
+    ...pendientes.map((f) => {
+      const partes = partesPorPpto.get(f.presupuestoId) ?? 1;
+      return `• ${f.titulo}${partes > 1 ? ` (parte ${f.orden + 1})` : ""}: ${pesos(f.importe)} neto`;
+    }),
+    "",
+    "¿Podrían enviarnos las OC así facturamos, por favor?",
+    "Quedo atenta!",
+    "",
+    "Gracias",
+    "Saludos!",
+  ].join("\n");
 
   async function copiar() {
     try {
@@ -171,7 +179,11 @@ export function TablaFacturacion({ filas: iniciales }: { filas: FilaFactura[] })
         <section className="card space-y-2">
           <h2 className="text-sm font-medium">Pendiente de facturar{cliente ? ` · ${cliente}` : " · todos los clientes"}</h2>
           {!cliente && <p className="text-xs text-amber-700">Elegí un cliente arriba para armar el detalle de ese cliente.</p>}
-          <textarea readOnly className="input h-48 font-normal" value={textoOC} aria-label="Detalle para pedir la OC" onFocus={(e) => e.target.select()} />
+          <textarea
+            readOnly
+            rows={textoOC.split("\n").length}
+            className="input max-w-xl resize-none font-normal leading-relaxed"
+            value={textoOC} aria-label="Detalle para pedir la OC" onFocus={(e) => e.target.select()} />
           <div className="flex items-center gap-3">
             <button type="button" className="btn" onClick={copiar}>Copiar</button>
             {copiado && <span className="text-sm text-zinc-500">{copiado}</span>}
