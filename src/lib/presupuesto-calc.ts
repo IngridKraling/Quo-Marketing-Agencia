@@ -198,6 +198,13 @@ export function resumenPresupuesto(lineas: Linea[], rubros: RubroInfo[], params:
   };
 }
 
+/**
+ * Línea que quedó sin completar (cantidad 0, o sin precio ni cotización): al aprobar se quita sola
+ * en vez de frenar la aprobación.
+ */
+export const lineaVacia = (l: Linea) =>
+  l.presupuestada !== false && (l.cantidad === 0 || (l.precioUnitario == null && l.cotizacionTotal == null));
+
 /** Problemas que impiden aprobar (igual que el Excel). */
 export function erroresParaAprobar(lineas: (Linea & { concepto: string; proveedor?: string | null; porMedida?: boolean })[]): string[] {
   const presup = lineas.filter((l) => l.presupuestada !== false);

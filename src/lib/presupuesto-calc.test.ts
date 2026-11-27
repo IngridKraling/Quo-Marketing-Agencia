@@ -3,6 +3,7 @@ import {
   calcularLinea,
   conTramo,
   estadoComercial,
+  lineaVacia,
   markupDeTramo,
   opcionesComerciales,
   controlProyecto,
@@ -200,5 +201,16 @@ describe("estado en dos partes", () => {
   it("una vez aprobado, el Estado solo se puede cancelar", () => {
     expect(opcionesComerciales("en_ejecucion")).toEqual(["aprobado", "cancelado"]);
     expect(opcionesComerciales("borrador")).toEqual(["borrador", "enviado", "aprobado", "rechazado", "cancelado"]);
+  });
+});
+
+describe("lineaVacia", () => {
+  const l = (x: Partial<Linea>): Linea => ({ rubroId: "r", precioUnitario: 1000, cantidad: 1, horas: null, dias: null, markup: null, markupConcepto: null, ...x });
+  it("cantidad 0 o sin precio ni cotización se quita al aprobar", () => {
+    expect(lineaVacia(l({ cantidad: 0 }))).toBe(true);
+    expect(lineaVacia(l({ precioUnitario: null }))).toBe(true);
+    expect(lineaVacia(l({ precioUnitario: null, cotizacionTotal: 50000 }))).toBe(false);
+    expect(lineaVacia(l({}))).toBe(false);
+    expect(lineaVacia(l({ cantidad: 0, presupuestada: false }))).toBe(false); // gastos no presupuestados no se tocan
   });
 });

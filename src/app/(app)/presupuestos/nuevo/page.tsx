@@ -1,7 +1,6 @@
 import { Suspense } from "react";
 import { EditorPresupuesto } from "@/components/editor-presupuesto";
 import { ReiniciarAlEntrar } from "@/components/reiniciar-al-entrar";
-import { lineaDesdeConcepto } from "@/lib/lineas";
 import { catalogo, referenciasMedidas } from "@/lib/servicios/datos";
 import { hoy } from "@/lib/formato";
 
@@ -18,12 +17,7 @@ export default function Page() {
 
 async function Nuevo() {
   const [cat, referencias] = await Promise.all([catalogo(), referenciasMedidas()]);
-  // Líneas por defecto (marcadas en Conceptos): vienen con cantidad 0 para completar o borrar.
-  const orden = new Map(cat.rubros.map((r, i) => [r.id, i]));
-  const porDefecto = cat.conceptos
-    .filter((c) => c.por_defecto)
-    .sort((a, b) => (orden.get(a.rubro_id) ?? 99) - (orden.get(b.rubro_id) ?? 99))
-    .map((c) => lineaDesdeConcepto(c, c.cantidad_def ?? 0));
+  // Arranca vacío: al elegir el área se cargan los conceptos "por defecto" de esa área.
   return (
     <ReiniciarAlEntrar>
       <EditorPresupuesto
@@ -42,7 +36,7 @@ async function Nuevo() {
           fecha_elaboracion: hoy(),
           fecha_evento: null,
           notas: null,
-          lineas: porDefecto,
+          lineas: [],
         }}
       />
     </ReiniciarAlEntrar>

@@ -45,6 +45,18 @@ const aInput = (f: FilaFactura): FacturaInput => ({
   comentarios: f.comentarios || null,
 });
 
+const MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+/** "2026-11" → "Noviembre 2026". */
+const nombreMes = (aaaamm: string) => `${MESES[Number(aaaamm.slice(5, 7)) - 1]} ${aaaamm.slice(0, 4)}`;
+/** Opciones de período: del mes que viene hacia atrás, 18 meses. */
+function opcionesMes(hoy = new Date()) {
+  return Array.from({ length: 18 }, (_, i) => {
+    const d = new Date(hoy.getFullYear(), hoy.getMonth() + 1 - i, 1);
+    const valor = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    return { valor, nombre: nombreMes(valor) };
+  });
+}
+
 const SI_NO = "rounded-md border px-2 py-1 text-xs font-medium";
 const VERDE = "bg-green-100 text-green-800 border-green-300";
 const AMBAR = "bg-amber-50 text-amber-800 border-amber-200";
@@ -53,16 +65,19 @@ export function TablaFacturacion({ filas: iniciales }: { filas: FilaFactura[] })
   const router = useRouter();
   const [filas, setFilas] = useState(iniciales);
   const [cliente, setCliente] = useState("");
+  const [area, setArea] = useState("");
   const [mostrar, setMostrar] = useState<"" | "pendiente" | "facturado">("pendiente");
   const [texto, setTexto] = useState("");
   const [aviso, setAviso] = useState<{ ok: boolean; texto: string } | null>(null);
   const [verDetalle, setVerDetalle] = useState(false);
   const [copiado, setCopiado] = useState("");
   const [, startTransition] = useTransition();
+  const [meses] = useState(() => opcionesMes());
   // Los filtros usan el FC N° ya guardado: si no, al escribirlo la fila desaparecería antes de guardarse.
   const [fcGuardado, setFcGuardado] = useState<Record<string, string>>(() => Object.fromEntries(iniciales.map((f) => [f.id, f.fc])));
   const facturadaGuardada = (f: FilaFactura) => !!fcGuardado[f.id]?.trim();
 
+  const areas = useMemo(() => [...new Set(iniciales.map((f) => f.area).filter((a): a is string => !!a))].sort(alfabetico), [iniciales]);
   const clientes = useMemo(() => [...new Set(iniciales.map((f) => f.cliente).filter((c): c is string => !!c))].sort(alfabetico), [iniciales]);
 
   // Partes del mismo presupuesto juntas; presupuestos por código.
@@ -72,12 +87,13 @@ export function TablaFacturacion({ filas: iniciales }: { filas: FilaFactura[] })
       .filter(
         (f) =>
           (!cliente || f.cliente === cliente) &&
+          (!area || f.area === area) &&
           (!mostrar || (mostrar === "facturado" ? facturadaGuardada(f) : !facturadaGuardada(f))) &&
           (!t || `${f.codigo} ${detalle(f)} ${f.oc} ${f.fc}`.toLowerCase().includes(t)),
       )
       .sort((a, b) => alfabetico(a.codigo ?? "", b.codigo ?? "") || a.orden - b.orden);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- facturadaGuardada depende de fcGuardado
-  }, [filas, cliente, mostrar, texto, fcGuardado]);
+  }, [filas, cliente, area, mostrar, texto, fcGuardado]);
 
   // Suma de las partes por presupuesto (todas, no solo las visibles).
   const sumaPorPpto = useMemo(() => {
@@ -162,6 +178,13 @@ export function TablaFacturacion({ filas: iniciales }: { filas: FilaFactura[] })
           </select>
         </label>
         <label className="text-xs text-zinc-500">
+          Área
+          <select className="input mt-1 block w-44" value={area} onChange={(e) => setArea(e.target.value)}>
+            <option value="">Todas</option>
+            {areas.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </label>
+        <label className="text-xs text-zinc-500">
           Mostrar
           <select className="input mt-1 block w-48" value={mostrar} onChange={(e) => setMostrar(e.target.value as typeof mostrar)}>
             <option value="pendiente">Pendiente de facturar</option>
@@ -219,7 +242,12 @@ export function TablaFacturacion({ filas: iniciales }: { filas: FilaFactura[] })
               return (
                 <tr key={f.id} className="align-top">
                   <td className="td">
-                    <input type="month" className="input" aria-label="Período de facturación" value={f.periodo} onChange={(e) => guardar(f.id, { periodo: e.target.value })} />
+                    <select className="input" aria-label="Período de facturación" value={f.periodo} onChange={(e) => guardar(f.id, { periodo: e.target.value })}>
+                      <option value="">—</option>
+                      {(meses.some((m) => m.valor === f.periodo) || !f.periodo ? meses : [{ valor: f.periodo, nombre: nombreMes(f.periodo) }, ...meses]).map((m) => (
+                        <option key={m.valor} value={m.valor}>{m.nombre}</option>
+                      ))}
+                    </select>
                   </td>
                   <td className="td whitespace-nowrap bg-zinc-50">{f.area ?? "—"}</td>
                   <td className="td bg-zinc-50">
