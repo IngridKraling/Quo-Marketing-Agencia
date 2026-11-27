@@ -3,8 +3,8 @@ import { notFound } from "next/navigation";
 import { Fragment, Suspense } from "react";
 import { BotonImprimir } from "@/components/boton-imprimir";
 import { createClient } from "@/lib/supabase/server";
-import { calcularLinea, lineaDesdeFila, type Parametros } from "@/lib/presupuesto-calc";
-import { parametros } from "@/lib/servicios/datos";
+import { calcularLinea, conTramo, lineaDesdeFila, paramsDeArea, type Parametros } from "@/lib/presupuesto-calc";
+import { parametros, tramos } from "@/lib/servicios/datos";
 import { decimal, fecha, pesos } from "@/lib/formato";
 
 export default function Page({ params, searchParams }: PageProps<"/presupuestos/[id]/cliente">) {
@@ -22,12 +22,14 @@ async function Vista({ params, searchParams }: { params: Promise<{ id: string }>
   const { id } = await params;
   const version = Number((await searchParams).version) || null;
   const supabase = await createClient();
-  const [{ data: p }, paramsActuales, { data: rubros }] = await Promise.all([
+  const [{ data: p }, paramsBase, { data: rubros }, listaTramos] = await Promise.all([
     supabase.from("presupuestos").select("*, clientes(nombre), presupuesto_lineas(*)").eq("id", id).maybeSingle(),
     parametros(),
     supabase.from("rubros").select("id, nombre, orden").order("orden"),
+    tramos(),
   ]);
   if (!p) notFound();
+  const paramsActuales = paramsDeArea(paramsBase, listaTramos, p.area_id);
 
   let filas = (p.presupuesto_lineas as Fila[]).filter((l) => l.presupuestada);
   let cab = p;
@@ -41,7 +43,9 @@ async function Vista({ params, searchParams }: { params: Promise<{ id: string }>
     params_ = datos.parametros;
   }
 
-  const lineas = filas.sort((a, b) => a.orden - b.orden).map((f) => ({ f, r: calcularLinea(lineaDesdeFila(f), params_) }));
+  // Markup por tramo (Trade): sale del costo total de estas mismas líneas.
+  const pCalc = conTramo(filas.map(lineaDesdeFila), params_);
+  const lineas = filas.sort((a, b) => a.orden - b.orden).map((f) => ({ f, r: calcularLinea(lineaDesdeFila(f), pCalc) }));
   const grupos = (rubros ?? [])
     .map((rubro) => ({ rubro, items: lineas.filter((x) => x.f.rubro_id === rubro.id) }))
     .filter((g) => g.items.length);

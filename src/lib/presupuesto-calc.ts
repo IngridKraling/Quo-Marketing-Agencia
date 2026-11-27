@@ -2,7 +2,8 @@
  * Cálculo de presupuestos, replicando el Excel "Presupuestos y Rentabilidad".
  *
  *   costo        = precio × cantidad × horas × días   (vacío = 1)
- *   markup       = el de la línea › el del concepto › el general (multiplicador: 1.4 = +40 %)
+ *   markup       = el de la línea › el del tramo (áreas con tramos, según el costo total) › el del concepto › el general
+ *                  (multiplicador: 1.4 = +40 %)
  *   venta        = costo × markup
  *   impuestos    = venta × Σ impuestos s/venta activos (IIBB…)
  *   contribución = venta − costo − impuestos;   margen % = contribución / venta
@@ -33,7 +34,21 @@ export type Parametros = {
   /** Suma de los impuestos s/venta activos, en %. */
   impuestosPct: number;
   margenMinimoPct: number;
+  /** Tramos de markup del área del presupuesto (vacío = el área no usa tramos). */
+  tramos?: Tramo[];
+  /** Markup del tramo que corresponde al costo total. Lo completa `conTramo`. */
+  markupTramo?: number | null;
 };
+
+/** "Hasta" incluye el monto; hasta = null es el último tramo, sin tope. */
+export type Tramo = { hasta: number | null; markup: number };
+export type TramoArea = Tramo & { areaId: string };
+
+/** Parámetros con los tramos del área del presupuesto (si el área no tiene, queda sin tramos). */
+export const paramsDeArea = <P extends Parametros>(p: P, tramos: TramoArea[], areaId: string | null | undefined): P => ({
+  ...p,
+  tramos: tramos.filter((t) => t.areaId === areaId).map(({ hasta, markup }) => ({ hasta, markup })),
+});
 
 export type Real = {
   igual: boolean;
@@ -66,7 +81,20 @@ export function costoLinea(l: Linea): number {
   return redondear(l.precioUnitario * uno(l.cantidad) * uno(l.horas) * uno(l.dias));
 }
 
-export const markupAplicado = (l: Linea, p: Parametros) => l.markup ?? l.markupConcepto ?? p.markupDefault;
+export const markupAplicado = (l: Linea, p: Parametros) => l.markup ?? p.markupTramo ?? l.markupConcepto ?? p.markupDefault;
+
+/** Markup del tramo para un costo total: el primero cuyo "hasta" lo incluye (o el sin tope). */
+export function markupDeTramo(costoTotal: number, tramos: Tramo[]): number | null {
+  const orden = [...tramos].sort((a, b) => (a.hasta ?? Infinity) - (b.hasta ?? Infinity));
+  return orden.find((t) => t.hasta == null || costoTotal <= t.hasta)?.markup ?? null;
+}
+
+/** Parámetros con el markup del tramo resuelto según el costo total de las líneas presupuestadas. */
+export function conTramo<P extends Parametros>(lineas: Linea[], p: P): P {
+  if (!p.tramos?.length) return { ...p, markupTramo: null };
+  const costoTotal = redondear(lineas.reduce((s, l) => s + costoLinea(l), 0));
+  return { ...p, markupTramo: markupDeTramo(costoTotal, p.tramos) };
+}
 
 export type Resultado = { costo: number; venta: number; impuestos: number; contribucion: number; margenPct: number };
 
@@ -88,7 +116,7 @@ function sumar(rs: Resultado[]): Resultado {
   return { ...r, margenPct: pct(r.contribucion, r.venta) };
 }
 
-export type RubroInfo = { id: string; nombre: string; alertaSinCotizar: boolean; revisarSiSeUsa: boolean };
+export type RubroInfo = { id: string; nombre: string; alertaSinCotizar: boolean; revisarSiSeUsa: boolean; areaId?: string | null };
 
 export function alertaRubro(rubro: RubroInfo, r: Resultado, p: Parametros): string | null {
   if (rubro.alertaSinCotizar) return r.costo === 0 ? "Sin cotizar: confirmar si corresponde" : null;
@@ -97,7 +125,8 @@ export function alertaRubro(rubro: RubroInfo, r: Resultado, p: Parametros): stri
   return null;
 }
 
-export function resumenPresupuesto(lineas: Linea[], rubros: RubroInfo[], p: Parametros) {
+export function resumenPresupuesto(lineas: Linea[], rubros: RubroInfo[], params: Parametros) {
+  const p = conTramo(lineas, params);
   const calc = lineas.filter((l) => l.presupuestada !== false).map((l) => ({ l, r: calcularLinea(l, p) }));
   const total = sumar(calc.map((c) => c.r));
   const porRubro = rubros.map((rubro) => {
@@ -108,6 +137,7 @@ export function resumenPresupuesto(lineas: Linea[], rubros: RubroInfo[], p: Para
   return {
     ...total,
     markupPromedio: total.costo === 0 ? 0 : redondear(total.venta / total.costo),
+    markupTramo: p.markupTramo ?? null,
     porRubro,
     lineasSinRubro: sinRubro.length,
   };

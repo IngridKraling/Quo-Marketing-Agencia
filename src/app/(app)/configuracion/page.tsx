@@ -1,5 +1,16 @@
 import { Suspense } from "react";
-import { guardarArea, guardarImpuesto, guardarParametros, guardarProveedor, guardarResponsable, guardarRubro } from "@/app/actions";
+import {
+  eliminarTramo,
+  guardarArea,
+  guardarImpuesto,
+  guardarParametros,
+  guardarProveedor,
+  guardarResponsable,
+  guardarRubro,
+  guardarTramo,
+} from "@/app/actions";
+import { CampoPesosForm } from "@/components/campo-pesos-form";
+import { decimal, pesos } from "@/lib/formato";
 import { FormAccion } from "@/components/form-accion";
 import { createClient } from "@/lib/supabase/server";
 
@@ -20,14 +31,26 @@ const Activo = ({ valor }: { valor: boolean }) => (
 
 async function Contenido() {
   const supabase = await createClient();
-  const [{ data: par }, { data: impuestos }, { data: rubros }, { data: areas }, { data: proveedores }, { data: responsables }] = await Promise.all([
+  const [{ data: par }, { data: impuestos }, { data: rubros }, { data: areas }, { data: proveedores }, { data: responsables }, { data: tramos }] = await Promise.all([
     supabase.from("parametros").select("*").maybeSingle(),
     supabase.from("impuestos_venta").select("*").order("orden"),
     supabase.from("rubros").select("*").order("orden"),
     supabase.from("areas").select("*").order("orden"),
     supabase.from("proveedores").select("*").order("nombre"),
     supabase.from("responsables").select("*").order("nombre"),
+    supabase.from("markup_tramos").select("*"),
   ]);
+  // Tramos ordenados por tope (el "sin tope" al final), agrupados por área.
+  const tramosDe = (areaId: string) =>
+    (tramos ?? [])
+      .filter((t) => t.area_id === areaId)
+      .sort((a, b) => (a.hasta == null ? Infinity : Number(a.hasta)) - (b.hasta == null ? Infinity : Number(b.hasta)));
+  const areaSelect = (valor: string | null) => (
+    <select name="area_id" defaultValue={valor ?? ""} className="input w-40" aria-label="Área">
+      <option value="">Común (todas)</option>
+      {areas?.map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
+    </select>
+  );
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
@@ -70,6 +93,7 @@ async function Contenido() {
           <h2 className="font-medium">Rubros</h2>
           <p className="text-sm text-zinc-500">
             <b>Sin cotizar</b>: avisa si el rubro queda en 0 (logística, viáticos…). <b>Revisar si se usa</b>: avisa si tiene costo (ej. Otros).
+            El <b>área</b> define en qué presupuestos aparece; “Común” aparece en todos.
           </p>
         </div>
         {rubros?.map((r) => (
@@ -77,6 +101,7 @@ async function Contenido() {
             <input type="hidden" name="id" value={r.id} />
             <input name="nombre" defaultValue={r.nombre} className="input w-44" aria-label="Nombre" />
             <input name="orden" type="number" defaultValue={r.orden} className="input w-16" aria-label="Orden" />
+            {areaSelect(r.area_id)}
             <label className="flex items-center gap-1 text-xs"><input type="checkbox" name="alerta_sin_cotizar" defaultChecked={r.alerta_sin_cotizar} /> Sin cotizar</label>
             <label className="flex items-center gap-1 text-xs"><input type="checkbox" name="revisar_si_se_usa" defaultChecked={r.revisar_si_se_usa} /> Revisar si se usa</label>
             <Activo valor={r.activo} />
@@ -85,6 +110,7 @@ async function Contenido() {
         <FormAccion action={guardarRubro} boton="Agregar" className="flex flex-wrap items-center gap-2 border-t border-zinc-200 pt-3">
           <input name="nombre" placeholder="Rubro nuevo" required className="input w-44" />
           <input name="orden" type="number" defaultValue={200} className="input w-16" aria-label="Orden" />
+          {areaSelect(null)}
         </FormAccion>
       </section>
 
@@ -107,6 +133,54 @@ async function Contenido() {
           <input name="prefijo" placeholder="Prefijo" required className="input w-20" />
           <input name="orden" type="number" defaultValue={50} className="input w-16" aria-label="Orden" />
         </FormAccion>
+      </section>
+
+      <section className="card space-y-3 lg:col-span-2">
+        <div>
+          <h2 className="font-medium">Markup por tramo</h2>
+          <p className="text-sm text-zinc-500">
+            En las áreas con tramos, el markup de cada línea sale del <b>costo total</b> del presupuesto. “Hasta” incluye el monto; el
+            tramo sin tope es para todo lo que supere el último. Si una línea tiene markup cargado a mano, ese manda. Un área sin tramos usa el
+            markup de cada concepto.
+          </p>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          {areas?.map((a) => {
+            const lista = tramosDe(a.id);
+            return (
+              <div key={a.id} className="space-y-2 rounded-md border border-zinc-200 p-3">
+                <h3 className="text-sm font-medium">{a.nombre} {!lista.length && <span className="font-normal text-zinc-500">· sin tramos</span>}</h3>
+                {lista.map((t, i) => {
+                  const desde = i > 0 ? lista[i - 1].hasta : null;
+                  return (
+                    <div key={t.id} className="flex flex-wrap items-center gap-2">
+                      <FormAccion action={guardarTramo} boton="Guardar" variante="sec" className="flex flex-wrap items-center gap-2">
+                        <input type="hidden" name="id" value={t.id} />
+                        <input type="hidden" name="area_id" value={a.id} />
+                        <span className="w-24 text-xs text-zinc-500">{desde == null ? "Desde $ 0" : `Más de ${pesos(Number(desde))}`}</span>
+                        <span className="text-xs text-zinc-500">hasta</span>
+                        <CampoPesosForm name="hasta" defaultValue={t.hasta == null ? null : Number(t.hasta)} placeholder="Sin tope" etiqueta="Hasta (incluido)" className="input w-36" />
+                        <span className="text-xs text-zinc-500">markup ×</span>
+                        <input name="markup" type="number" step="any" min="0" defaultValue={t.markup} required className="input w-20" aria-label="Markup" />
+                        <span className="w-12 text-xs text-zinc-500">+{decimal(Math.round((Number(t.markup) - 1) * 100))} %</span>
+                      </FormAccion>
+                      <FormAccion action={eliminarTramo} boton="Quitar" variante="sec">
+                        <input type="hidden" name="id" value={t.id} />
+                      </FormAccion>
+                    </div>
+                  );
+                })}
+                <FormAccion action={guardarTramo} boton="Agregar tramo" className="flex flex-wrap items-center gap-2 border-t border-zinc-100 pt-2">
+                  <input type="hidden" name="area_id" value={a.id} />
+                  <span className="text-xs text-zinc-500">hasta</span>
+                  <CampoPesosForm name="hasta" placeholder="Sin tope" etiqueta="Hasta (incluido)" className="input w-36" />
+                  <span className="text-xs text-zinc-500">markup ×</span>
+                  <input name="markup" type="number" step="any" min="0" required placeholder="1,6" className="input w-20" aria-label="Markup" />
+                </FormAccion>
+              </div>
+            );
+          })}
+        </div>
       </section>
 
       <section className="card space-y-3 lg:col-span-2">

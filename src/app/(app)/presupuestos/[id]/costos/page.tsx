@@ -5,7 +5,7 @@ import { eliminarFactura, registrarFactura } from "@/app/actions";
 import { EditorCostos, type FilaCosto } from "@/components/editor-costos";
 import { FormAccion } from "@/components/form-accion";
 import { createClient } from "@/lib/supabase/server";
-import { ETIQUETA_ESTADO, estaCongelado, lineaDesdeFila, numONull, resumenPresupuesto, type Estado } from "@/lib/presupuesto-calc";
+import { ETIQUETA_ESTADO, estaCongelado, lineaDesdeFila, numONull, paramsDeArea, resumenPresupuesto, type Estado } from "@/lib/presupuesto-calc";
 import { catalogo } from "@/lib/servicios/datos";
 import { fecha, hoy, pesos } from "@/lib/formato";
 
@@ -23,14 +23,15 @@ async function Contenido({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
   const [{ data: p }, cat, { data: facturas }] = await Promise.all([
-    supabase.from("presupuestos").select("id, codigo, titulo, estado, version, presupuesto_lineas(*)").eq("id", id).maybeSingle(),
+    supabase.from("presupuestos").select("id, codigo, titulo, estado, version, area_id, presupuesto_lineas(*)").eq("id", id).maybeSingle(),
     catalogo(),
     supabase.from("facturacion").select("*").eq("presupuesto_id", id).order("fecha"),
   ]);
   if (!p) notFound();
 
   const filas = (p.presupuesto_lineas as Fila[]).sort((a, b) => Number(!a.presupuestada) - Number(!b.presupuestada) || a.orden - b.orden);
-  const resumen = resumenPresupuesto(filas.map(lineaDesdeFila), cat.rubros, cat.parametros);
+  const paramsArea = paramsDeArea(cat.parametros, cat.tramos, p.area_id);
+  const resumen = resumenPresupuesto(filas.map(lineaDesdeFila), cat.rubros, paramsArea);
   const facturado = (facturas ?? []).reduce((s, f) => s + Number(f.monto_neto), 0);
   const s = (v: unknown) => (v == null ? null : String(v));
 
@@ -53,7 +54,7 @@ async function Contenido({ params }: { params: Promise<{ id: string }> }) {
       <EditorCostos
         presupuestoId={id}
         rubros={cat.rubros}
-        params={cat.parametros}
+        params={paramsArea}
         facturado={facturado}
         ventaPresupuestada={resumen.venta}
         impuestosPresupuestados={resumen.impuestos}
