@@ -40,6 +40,14 @@ function Comparaciones({ l, c, markup, params }: { l: LineaInput; c: Comparacion
   const frases: { tono: "info" | "ok" | "alerta"; texto: ReactNode }[] = [];
   const unidad = c.unitario?.por === "pieza" ? "por pieza" : "por m²";
 
+  // 0) Sin proveedor no se puede aprobar ni comparar con sus cotizaciones anteriores.
+  if (!l.proveedor) {
+    frases.push({
+      tono: "alerta",
+      texto: <>Elegí el <b>proveedor</b>: es obligatorio para aprobar el presupuesto y para comparar con lo que cobró otras veces.</>,
+    });
+  }
+
   // 1) Costo: ¿cuánto cobró este proveedor la última vez? ¿y el promedio de todos?
   if (c.ultimaDelProveedor) {
     const u = c.ultimaDelProveedor;
