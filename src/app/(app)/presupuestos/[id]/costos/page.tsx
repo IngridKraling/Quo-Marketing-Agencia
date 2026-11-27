@@ -69,6 +69,7 @@ async function Contenido({ params }: { params: Promise<{ id: string }> }) {
             cantidad: numONull(f.cantidad),
             horas: numONull(f.horas),
             dias: numONull(f.dias),
+            cotizacion_total: numONull(f.cotizacion_total as string | null),
             real_igual: !!f.real_igual,
             real_precio: numONull(f.real_precio),
             real_cantidad: numONull(f.real_cantidad),

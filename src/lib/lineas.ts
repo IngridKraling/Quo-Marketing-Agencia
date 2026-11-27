@@ -11,6 +11,7 @@ export const aLinea = (l: LineaInput): Linea => ({
   dias: l.dias,
   markup: l.markup,
   markupConcepto: l.markup_concepto,
+  cotizacionTotal: l.cotizacion_total ?? null,
 });
 
 /** Las líneas que se miden por Unidad o por Servicio no llevan horas: solo cantidad y días. */
@@ -33,5 +34,9 @@ export function lineaDesdeConcepto(c: Concepto, cantidad: number | null = 1): Li
     dias: c.dias_def,
     markup: null,
     markup_concepto: c.markup,
+    base: null,
+    altura: null,
+    cotizacion_total: null,
+    markup_ref_presupuesto_id: null,
   };
 }

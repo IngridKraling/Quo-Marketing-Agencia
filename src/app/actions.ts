@@ -10,6 +10,7 @@ import {
   erroresParaAprobar,
   estaCongelado,
   lineaDesdeFila,
+  markupAplicado,
   paramsDeArea,
   resumenPresupuesto,
   type Estado,
@@ -18,6 +19,7 @@ import { catalogo, parametros, tramos } from "@/lib/servicios/datos";
 import { construirImportFactura, configFacturacionDesdeEnv } from "@/lib/sigma/factura";
 import { SigmaError, sigmaRequest } from "@/lib/sigma/client";
 import { sincronizarClientesSigma } from "@/lib/servicios/sync";
+import { aLinea } from "@/lib/lineas";
 
 export type Resultado = { ok: boolean; mensaje: string } | null;
 
@@ -54,6 +56,11 @@ const lineaSchema = z.object({
   dias: numOpc.refine((v) => v == null || v >= 0, "Los días no pueden ser negativos"),
   markup: numOpc.refine((v) => v == null || v > 0, "El markup tiene que ser mayor que 0"),
   markup_concepto: numOpc,
+  // Líneas por medida (Trade)
+  base: numOpc.refine((v) => v == null || v > 0, "La base tiene que ser mayor que 0").optional(),
+  altura: numOpc.refine((v) => v == null || v > 0, "La altura tiene que ser mayor que 0").optional(),
+  cotizacion_total: numOpc.refine((v) => v == null || v >= 0, "La cotización no puede ser negativa").optional(),
+  markup_ref_presupuesto_id: uuidOpc.optional(),
 });
 export type LineaInput = z.infer<typeof lineaSchema>;
 
@@ -97,9 +104,18 @@ export async function guardarPresupuesto(input: PresupuestoInput): Promise<{ ok:
   const del = await borrar;
   if (del.error) return error(del.error.message);
   if (lineas.length) {
-    const up = await supabase
-      .from("presupuesto_lineas")
-      .upsert(lineas.map((l, orden) => ({ ...l, orden, presupuesto_id: presupuestoId, presupuestada: true })));
+    // Se guarda el markup con el que quedó cada línea (tramo incluido) para compararlo en presupuestos futuros.
+    const [paramsBase, listaTramos] = await Promise.all([parametros(), tramos()]);
+    const pCalc = conTramo(lineas.map(aLinea), paramsDeArea(paramsBase, listaTramos, cabecera.area_id));
+    const up = await supabase.from("presupuesto_lineas").upsert(
+      lineas.map((l, orden) => ({
+        ...l,
+        orden,
+        presupuesto_id: presupuestoId,
+        presupuestada: true,
+        markup_aplicado: markupAplicado(aLinea(l), pCalc),
+      })),
+    );
     if (up.error) return error(up.error.message);
   }
 
@@ -117,7 +133,13 @@ export async function aprobarPresupuesto(id: string): Promise<Resultado> {
   if (!p) return error("Presupuesto no encontrado");
   if (estaCongelado(p.estado)) return error("Esta versión ya está aprobada");
   const filas = p.presupuesto_lineas as (Parameters<typeof lineaDesdeFila>[0] & { concepto: string; orden: number })[];
-  const lineas = filas.map((f) => ({ ...lineaDesdeFila(f), concepto: f.concepto }));
+  const porMedida = new Set(cat.rubros.filter((r) => r.porMedida).map((r) => r.id));
+  const lineas = filas.map((f) => ({
+    ...lineaDesdeFila(f),
+    concepto: f.concepto,
+    proveedor: (f as { proveedor?: string | null }).proveedor ?? null,
+    porMedida: !!f.rubro_id && porMedida.has(f.rubro_id),
+  }));
   const errores = erroresParaAprobar(lineas);
   if (errores.length) return error(`No se puede aprobar: ${errores.join(" · ")}`);
 
@@ -313,7 +335,13 @@ export async function guardarRubro(_: Resultado, form: FormData): Promise<Result
   return guardarFila(
     "rubros",
     id,
-    { ...fila, alerta_sin_cotizar: form.get("alerta_sin_cotizar") != null, revisar_si_se_usa: form.get("revisar_si_se_usa") != null, activo: activoDe(form) },
+    {
+      ...fila,
+      alerta_sin_cotizar: form.get("alerta_sin_cotizar") != null,
+      revisar_si_se_usa: form.get("revisar_si_se_usa") != null,
+      por_medida: form.get("por_medida") != null,
+      activo: activoDe(form),
+    },
     "/configuracion",
     "Rubro guardado",
   );
@@ -373,7 +401,14 @@ export async function guardarArea(_: Resultado, form: FormData): Promise<Resulta
     .safeParse(Object.fromEntries(form));
   if (!parsed.success) return error(parsed.error.issues[0]?.message ?? "Revisá los datos");
   const { id, ...fila } = parsed.data;
-  return guardarFila("areas", id, { ...fila, activo: activoDe(form) }, "/configuracion", "Área guardada");
+  return guardarFila(
+    "areas",
+    id,
+    // En el alta (sin id) el checkbox arranca tildado.
+    { ...fila, carga_por_defecto: form.get("carga_por_defecto") != null || !id, activo: activoDe(form) },
+    "/configuracion",
+    "Área guardada",
+  );
 }
 
 export async function guardarImpuesto(_: Resultado, form: FormData): Promise<Resultado> {

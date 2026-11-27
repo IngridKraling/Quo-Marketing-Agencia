@@ -15,7 +15,7 @@ export default function Page({ params, searchParams }: PageProps<"/presupuestos/
   );
 }
 
-type Fila = Parameters<typeof lineaDesdeFila>[0] & { concepto: string; orden: number; unidad: string | null };
+type Fila = Parameters<typeof lineaDesdeFila>[0] & { concepto: string; orden: number; unidad: string | null; base?: string | null; altura?: string | null };
 
 /** Lo que ve el cliente: rubros y conceptos con precio de venta. Sin costos, markup ni observaciones internas. */
 async function Vista({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
@@ -86,7 +86,12 @@ async function Vista({ params, searchParams }: { params: Promise<{ id: string }>
                 </tr>
                 {g.items.map(({ f, r }, i) => (
                   <tr key={`${g.rubro.id}-${i}`}>
-                    <td className="td pl-6">{f.concepto}</td>
+                    <td className="td pl-6">
+                      {f.concepto}
+                      {f.base != null && f.altura != null && (
+                        <span className="text-zinc-500"> · {decimal(Number(f.base))} × {decimal(Number(f.altura))} m</span>
+                      )}
+                    </td>
                     <td className="td text-right tabular-nums">{f.cantidad != null ? decimal(Number(f.cantidad)) : ""}</td>
                     <td className="td text-right tabular-nums">{pesos(r.venta)}</td>
                   </tr>

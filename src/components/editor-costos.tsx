@@ -24,6 +24,8 @@ export type FilaCosto = RealInput & {
   cantidad: number | null;
   horas: number | null;
   dias: number | null;
+  /** Línea por medida (Trade): el costo presupuestado es la cotización total. */
+  cotizacion_total?: number | null;
   rubro_id?: string | null;
 };
 
@@ -51,6 +53,7 @@ const aLinea = (f: FilaCosto): Linea => ({
   cantidad: f.cantidad,
   horas: f.horas,
   dias: f.dias,
+  cotizacionTotal: f.cotizacion_total ?? null,
   markup: null,
   markupConcepto: null,
   presupuestada: f.presupuestada,
@@ -166,7 +169,9 @@ export function EditorCostos({
                     </td>
                     <td className="td whitespace-nowrap text-xs text-zinc-500">
                       {f.presupuestada
-                        ? [f.precio_unitario != null && pesos(f.precio_unitario), f.cantidad != null && `× ${decimal(f.cantidad)}`, f.horas != null && `× ${decimal(f.horas)} h`, f.dias != null && `× ${decimal(f.dias)} d`].filter(Boolean).join(" ")
+                        ? f.cotizacion_total != null
+                          ? `Cotización ${pesos(f.cotizacion_total)}${f.cantidad != null ? ` · ${decimal(f.cantidad)} pza` : ""}`
+                          : [f.precio_unitario != null && pesos(f.precio_unitario), f.cantidad != null && `× ${decimal(f.cantidad)}`, f.horas != null && `× ${decimal(f.horas)} h`, f.dias != null && `× ${decimal(f.dias)} d`].filter(Boolean).join(" ")
                         : "No presupuestado"}
                     </td>
                     <td className="td text-right tabular-nums">{f.presupuestada ? pesos(presupuestado) : "—"}</td>
@@ -178,7 +183,7 @@ export function EditorCostos({
                         <td className="td"><CampoNumero valor={f.real_cantidad} etiqueta="Cantidad real" className="input min-w-16" placeholder={f.cantidad != null ? decimal(f.cantidad) : ""} onCambio={(v) => set(f.id, { real_cantidad: v })} /></td>
                         <td className="td"><CampoNumero valor={f.real_horas} etiqueta="Horas reales" className="input min-w-16" placeholder={f.horas != null ? decimal(f.horas) : ""} onCambio={(v) => set(f.id, { real_horas: v })} /></td>
                         <td className="td"><CampoNumero valor={f.real_dias} etiqueta="Días reales" className="input min-w-16" placeholder={f.dias != null ? decimal(f.dias) : ""} onCambio={(v) => set(f.id, { real_dias: v })} /></td>
-                        <td className="td"><CampoPesos valor={f.real_precio} etiqueta="Precio real" className="input min-w-32" placeholder={f.precio_unitario != null ? pesos(f.precio_unitario) : ""} onCambio={(v) => set(f.id, { real_precio: v })} /></td>
+                        <td className="td"><CampoPesos valor={f.real_precio} etiqueta="Precio real" className="input min-w-32" placeholder={f.cotizacion_total != null ? pesos(f.cotizacion_total) : f.precio_unitario != null ? pesos(f.precio_unitario) : ""} onCambio={(v) => set(f.id, { real_precio: v })} /></td>
                       </>
                     ) : (
                       <td className="td" colSpan={4} />
