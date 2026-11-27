@@ -15,8 +15,13 @@ import {
   ETIQUETA_ESTADO,
   calcularLinea,
   conTramo,
+  COLOR_EJECUCION,
+  COLOR_ESTADO,
+  ETAPAS_EJECUCION,
+  ETIQUETA_EJECUCION,
   estaCongelado,
-  estadosPosibles,
+  estadoComercial,
+  opcionesComerciales,
   paramsDeArea,
   resumenPresupuesto,
   type Estado,
@@ -221,7 +226,9 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo, refer
     });
 
   // "Aprobado" se hace con el botón "Aprobar y congelar" (guarda antes de aprobar).
-  const posibles = estadosPosibles(estado).filter((e) => e !== "aprobado" || estado === "aprobado");
+  // Estado comercial y, si está aprobado, etapa de ejecución. "Aprobado" se hace con el botón (guarda y valida).
+  const comercial = estadoComercial(estado);
+  const opcionesEstado = opcionesComerciales(estado).filter((e) => e !== "aprobado" || congelado);
 
   return (
     <div className="space-y-4">
@@ -364,16 +371,30 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo, refer
                 <button className="btn-sec" onClick={() => ejecutar(() => crearNuevaVersion(p.id!))} disabled={pendiente}>Crear nueva versión</button>
               )}
               {p.id && (
-                <label className="text-sm">Estado
-                  <select
-                    className="input mt-1"
-                    value={estado}
-                    disabled={pendiente}
-                    onChange={(e) => ejecutar(() => cambiarEstado(p.id!, e.target.value as Estado))}
-                  >
-                    {posibles.map((e) => <option key={e} value={e}>{ETIQUETA_ESTADO[e]}</option>)}
-                  </select>
-                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="text-sm">Estado
+                    <select
+                      className={`input mt-1 font-medium ${COLOR_ESTADO[comercial]}`}
+                      value={comercial}
+                      disabled={pendiente}
+                      onChange={(e) => e.target.value !== comercial && ejecutar(() => cambiarEstado(p.id!, e.target.value as Estado))}
+                    >
+                      {opcionesEstado.map((e) => <option key={e} value={e} className="bg-white text-zinc-900">{ETIQUETA_ESTADO[e]}</option>)}
+                    </select>
+                  </label>
+                  {congelado && (
+                    <label className="text-sm">Ejecución
+                      <select
+                        className={`input mt-1 font-medium ${COLOR_EJECUCION[estado as (typeof ETAPAS_EJECUCION)[number]]}`}
+                        value={estado}
+                        disabled={pendiente}
+                        onChange={(e) => ejecutar(() => cambiarEstado(p.id!, e.target.value as Estado))}
+                      >
+                        {ETAPAS_EJECUCION.map((e) => <option key={e} value={e} className="bg-white text-zinc-900">{ETIQUETA_EJECUCION[e]}</option>)}
+                      </select>
+                    </label>
+                  )}
+                </div>
               )}
               {p.id && (
                 <div className="flex flex-wrap gap-3 pt-1 text-sm">

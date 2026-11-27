@@ -191,11 +191,12 @@ export async function crearNuevaVersion(id: string): Promise<Resultado> {
 /** Cambios de estado que no son aprobar ni crear versión. */
 export async function cambiarEstado(id: string, estado: Estado): Promise<Resultado> {
   if (!ESTADOS.includes(estado)) return error("Estado inválido");
-  if (estado === "aprobado") return error("Para aprobar usá el botón Aprobar y congelar");
   const supabase = await db();
   const { data: p } = await supabase.from("presupuestos").select("estado").eq("id", id).single();
   if (!p) return error("Presupuesto no encontrado");
   const congelado = estaCongelado(p.estado);
+  // Volver a "Aprobado · Sin empezar" desde una etapa de ejecución está bien; aprobar uno sin aprobar, no (hay que validar).
+  if (estado === "aprobado" && !congelado) return error("Para aprobar usá Aprobar y congelar (valida el presupuesto)");
   if (congelado && (estado === "borrador" || estado === "enviado")) return error("Para volver a editar, creá una nueva versión");
   if (!congelado && (estado === "en_ejecucion" || estado === "finalizado" || estado === "facturado")) {
     return error("Primero hay que aprobar el presupuesto");

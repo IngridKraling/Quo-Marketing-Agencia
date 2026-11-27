@@ -30,16 +30,27 @@ export const ETIQUETA_ESTADO: Record<Estado, string> = {
 /** Estados en los que el presupuesto quedó congelado (solo se cargan costos reales). */
 export const estaCongelado = (e: Estado) => e === "aprobado" || e === "en_ejecucion" || e === "finalizado" || e === "facturado";
 
-/**
- * Estados a los que se puede pasar desde el actual. "Aprobado" solo desde uno sin aprobar (valida y congela,
- * con aprobarPresupuesto); una vez aprobado no se vuelve a borrador/enviado (hay que crear una nueva versión).
+
+/*
+ * El estado se muestra en dos partes:
+ *   · Estado (comercial): Borrador, Enviado, Aprobado, Rechazado, Cancelado.
+ *   · Ejecución (solo si está aprobado): Sin empezar, En ejecución, Finalizado, Facturado.
+ * En la base sigue siendo un solo campo: aprobado = "Aprobado · Sin empezar".
  */
-export function estadosPosibles(actual: Estado): Estado[] {
-  const permitidos: Estado[] = estaCongelado(actual)
-    ? ["en_ejecucion", "finalizado", "facturado", "cancelado"]
-    : ["borrador", "enviado", "aprobado", "rechazado", "cancelado"];
-  return ESTADOS.filter((e) => e === actual || permitidos.includes(e));
-}
+export const ESTADOS_COMERCIALES = ["borrador", "enviado", "aprobado", "rechazado", "cancelado"] as const;
+export type EstadoComercial = (typeof ESTADOS_COMERCIALES)[number];
+export const ETAPAS_EJECUCION = ["aprobado", "en_ejecucion", "finalizado", "facturado"] as const satisfies readonly Estado[];
+export const ETIQUETA_EJECUCION: Record<(typeof ETAPAS_EJECUCION)[number], string> = {
+  aprobado: "Sin empezar",
+  en_ejecucion: "En ejecución",
+  finalizado: "Finalizado",
+  facturado: "Facturado",
+};
+export const estadoComercial = (e: Estado): EstadoComercial => (estaCongelado(e) ? "aprobado" : (e as EstadoComercial));
+
+/** Opciones del desplegable "Estado" (comercial). Una vez aprobado solo se puede cancelar. */
+export const opcionesComerciales = (actual: Estado): EstadoComercial[] =>
+  estaCongelado(actual) ? ["aprobado", "cancelado"] : [...ESTADOS_COMERCIALES];
 
 /** Color de cada estado: verde = aprobado; rojo = rechazado/cancelado; ámbar = pendiente (borrador/enviado). */
 export const COLOR_ESTADO: Record<Estado, string> = {
@@ -48,9 +59,17 @@ export const COLOR_ESTADO: Record<Estado, string> = {
   aprobado: "bg-green-100 text-green-800 border-green-300",
   en_ejecucion: "bg-blue-100 text-blue-800 border-blue-300",
   finalizado: "bg-indigo-100 text-indigo-800 border-indigo-300",
-  facturado: "bg-zinc-800 text-white border-zinc-800",
+  facturado: "bg-green-600 text-white border-green-600",
   rechazado: "bg-red-100 text-red-800 border-red-300",
   cancelado: "bg-red-100 text-red-800 border-red-300",
+};
+
+/** Color de la etapa de ejecución (una vez aprobado). */
+export const COLOR_EJECUCION: Record<(typeof ETAPAS_EJECUCION)[number], string> = {
+  aprobado: "bg-white text-zinc-700 border-zinc-300",
+  en_ejecucion: "bg-blue-100 text-blue-800 border-blue-300",
+  finalizado: "bg-indigo-100 text-indigo-800 border-indigo-300",
+  facturado: "bg-green-600 text-white border-green-600",
 };
 
 export type Parametros = {
