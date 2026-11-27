@@ -219,12 +219,13 @@ export function TablaFacturacion({ filas: iniciales }: { filas: FilaFactura[] })
       )}
 
       <div className="card overflow-x-auto p-0">
-        <table className="w-full min-w-[1300px]">
+        <table className="w-full min-w-[1500px]">
           <thead>
             <tr>
               <th className="th w-36">Período de facturación</th>
               <th className="th">Área</th>
-              <th className="th min-w-72">Detalle</th>
+              <th className="th min-w-40">Cliente</th>
+              <th className="th min-w-56">Detalle</th>
               <th className="th text-right">Importe neto</th>
               <th className="th w-32">OC N°</th>
               <th className="th w-36">FC N°</th>
@@ -242,7 +243,7 @@ export function TablaFacturacion({ filas: iniciales }: { filas: FilaFactura[] })
               return (
                 <tr key={f.id} className="align-top">
                   <td className="td">
-                    <select className="input" aria-label="Período de facturación" value={f.periodo} onChange={(e) => guardar(f.id, { periodo: e.target.value })}>
+                    <select className="input min-w-40" aria-label="Período de facturación" value={f.periodo} onChange={(e) => guardar(f.id, { periodo: e.target.value })}>
                       <option value="">—</option>
                       {(meses.some((m) => m.valor === f.periodo) || !f.periodo ? meses : [{ valor: f.periodo, nombre: nombreMes(f.periodo) }, ...meses]).map((m) => (
                         <option key={m.valor} value={m.valor}>{m.nombre}</option>
@@ -251,8 +252,12 @@ export function TablaFacturacion({ filas: iniciales }: { filas: FilaFactura[] })
                   </td>
                   <td className="td whitespace-nowrap bg-zinc-50">{f.area ?? "—"}</td>
                   <td className="td bg-zinc-50">
+                    {f.cliente ?? "—"}
+                    {f.marca && <span className="block text-xs text-zinc-500">{f.marca}</span>}
+                  </td>
+                  <td className="td bg-zinc-50">
                     {partes > 1 && <span className="text-zinc-400">↳ </span>}
-                    {detalle(f)}{" "}
+                    <span className="font-medium">{f.titulo}</span>{" "}
                     <Link className="whitespace-nowrap font-mono text-xs text-zinc-500 underline" href={`/presupuestos/${f.presupuestoId}`}>{f.codigo}</Link>
                     {partes > 1 && <span className="ml-1 text-xs text-zinc-500">· parte {f.orden + 1} de {partes}</span>}
                     {descuadre !== 0 && (
@@ -272,10 +277,10 @@ export function TablaFacturacion({ filas: iniciales }: { filas: FilaFactura[] })
                     )}
                   </td>
                   <td className="td">
-                    <input className="input" aria-label="OC N°" value={f.oc} placeholder="—" onChange={(e) => set(f.id, { oc: e.target.value })} onBlur={() => guardar(f.id)} />
+                    <input className="input min-w-28" aria-label="OC N°" value={f.oc} placeholder="—" onChange={(e) => set(f.id, { oc: e.target.value })} onBlur={() => guardar(f.id)} />
                   </td>
                   <td className="td">
-                    <input className="input" aria-label="FC N°" value={f.fc} placeholder="—" onChange={(e) => set(f.id, { fc: e.target.value })} onBlur={() => guardar(f.id)} />
+                    <input className="input min-w-28" aria-label="FC N°" value={f.fc} placeholder="—" onChange={(e) => set(f.id, { fc: e.target.value })} onBlur={() => guardar(f.id)} />
                     <span className={`mt-1 inline-block whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold ${facturada(f) ? VERDE : AMBAR}`}>
                       {facturada(f) ? "Facturado" : "Pendiente de facturar"}
                     </span>
@@ -311,13 +316,13 @@ export function TablaFacturacion({ filas: iniciales }: { filas: FilaFactura[] })
               );
             })}
             {!visibles.length && (
-              <tr><td colSpan={10} className="td py-6 text-center text-sm text-zinc-500">No hay filas con esos filtros.</td></tr>
+              <tr><td colSpan={11} className="td py-6 text-center text-sm text-zinc-500">No hay filas con esos filtros.</td></tr>
             )}
           </tbody>
           {visibles.length > 0 && (
             <tfoot>
               <tr className="border-t border-zinc-200 font-semibold">
-                <td className="td" colSpan={3}>Total de lo que se ve</td>
+                <td className="td" colSpan={4}>Total de lo que se ve</td>
                 <td className="td whitespace-nowrap text-right tabular-nums">{pesos(total)}</td>
                 <td className="td" colSpan={6} />
               </tr>
