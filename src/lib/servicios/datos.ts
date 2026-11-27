@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { numONull, type Estado, type Origen, type Parametros, type RubroInfo, type TramoArea } from "@/lib/presupuesto-calc";
 import type { Referencia } from "@/lib/medidas";
+import type { ProveedorRubros } from "@/lib/opciones";
 import { alfabetico, type Marca } from "@/lib/opciones";
 
 export type Concepto = {
@@ -27,7 +28,8 @@ export type Catalogo = {
   /** Tramos de markup de todas las áreas (se filtran con paramsDeArea según el área del presupuesto). */
   tramos: TramoArea[];
   conceptos: Concepto[];
-  proveedores: string[];
+  /** Proveedores activos con los rubros en que trabajan (vacío = sin asignar). */
+  proveedores: ProveedorRubros[];
   /** cargaPorDefecto = false: un presupuesto nuevo de esa área arranca sin las líneas "por defecto" (Trade). */
   areas: (Opcion & { cargaPorDefecto: boolean })[];
   clientes: Opcion[];
@@ -95,7 +97,7 @@ export async function catalogo(): Promise<Catalogo> {
     tramos(),
     supabase.from("rubros").select("id, nombre, alerta_sin_cotizar, revisar_si_se_usa, area_id, por_medida").eq("activo", true).order("orden"),
     supabase.from("conceptos").select("*, proveedores(nombre)").eq("activo", true).order("nombre"),
-    supabase.from("proveedores").select("nombre").eq("activo", true).order("nombre"),
+    supabase.from("proveedores").select("nombre, proveedor_rubros(rubro_id)").eq("activo", true).order("nombre"),
     supabase.from("areas").select("id, nombre, carga_por_defecto").eq("activo", true).order("orden"),
     supabase.from("clientes").select("id, nombre").eq("activo", true).order("nombre"),
     supabase.from("marcas").select("cliente_id, nombre").eq("activo", true).order("nombre"),
@@ -127,7 +129,10 @@ export async function catalogo(): Promise<Catalogo> {
       dias_def: numONull(c.dias_def),
       areas_ocultas: (c.areas_ocultas as string[] | null) ?? [],
     })),
-    proveedores: (proveedores.data ?? []).map((p) => p.nombre),
+    proveedores: (proveedores.data ?? []).map((p) => ({
+      nombre: p.nombre,
+      rubroIds: ((p.proveedor_rubros as { rubro_id: string }[] | null) ?? []).map((r) => r.rubro_id),
+    })),
     areas: (areas.data ?? []).map((a) => ({ id: a.id, nombre: a.nombre, cargaPorDefecto: a.carga_por_defecto !== false })),
     clientes: (clientes.data ?? []).sort((a, b) => alfabetico(a.nombre, b.nombre)),
     marcas: (marcas.data ?? []).sort((a, b) => alfabetico(a.nombre, b.nombre)),

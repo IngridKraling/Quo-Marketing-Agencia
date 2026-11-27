@@ -27,3 +27,18 @@ export function rubrosParaArea<R extends { areaId?: string | null }>(rubros: R[]
 /** Conceptos que se ofrecen en un área: los que no la tienen entre sus áreas ocultas. */
 export const conceptosParaArea = <C extends { areas_ocultas?: string[] }>(conceptos: C[], areaId: string | null): C[] =>
   areaId ? conceptos.filter((c) => !c.areas_ocultas?.includes(areaId)) : conceptos;
+
+export type ProveedorRubros = { nombre: string; rubroIds: string[] };
+
+/**
+ * Proveedores para una línea de un rubro: primero los asignados a ese rubro (A → Z) y después, aparte,
+ * los que todavía no tienen ningún rubro asignado. Los asignados solo a otros rubros no aparecen.
+ * Si así no queda ninguno, se ofrecen todos (para no dejar la lista vacía).
+ */
+export function proveedoresParaRubro(proveedores: ProveedorRubros[], rubroId: string | null): { delRubro: string[]; sinAsignar: string[] } {
+  const nombres = (lista: ProveedorRubros[]) => lista.map((p) => p.nombre).sort(alfabetico);
+  const delRubro = nombres(proveedores.filter((p) => !!rubroId && p.rubroIds.includes(rubroId)));
+  const sinAsignar = nombres(proveedores.filter((p) => !p.rubroIds.length));
+  if (!delRubro.length && !sinAsignar.length) return { delRubro, sinAsignar: nombres(proveedores) };
+  return { delRubro, sinAsignar };
+}

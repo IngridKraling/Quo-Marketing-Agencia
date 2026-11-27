@@ -23,7 +23,7 @@ import {
   type Origen,
 } from "@/lib/presupuesto-calc";
 import type { Catalogo } from "@/lib/servicios/datos";
-import { conceptosParaArea, opcionesMarca as marcasDelCliente, rubrosParaArea } from "@/lib/opciones";
+import { conceptosParaArea, opcionesMarca as marcasDelCliente, proveedoresParaRubro, rubrosParaArea } from "@/lib/opciones";
 import { decimal, pesos, porcentaje } from "@/lib/formato";
 import { CampoNumero } from "@/components/campo-numero";
 import { CampoPesos } from "@/components/campo-pesos";
@@ -235,7 +235,6 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo, refer
         <p className="text-sm text-zinc-500">Elegí el rubro, después el concepto: si está en Conceptos se completan origen, proveedor, unidad, precio y markup.</p>
       )}
 
-      <datalist id="lista-proveedores">{cat.proveedores.map((x) => <option key={x} value={x} />)}</datalist>
       <datalist id="lista-unidades">{UNIDADES.map((x) => <option key={x} value={x} />)}</datalist>
       <div className="grid gap-6 2xl:grid-cols-[1fr_320px]">
         <div className="min-w-0 space-y-4">
@@ -442,6 +441,9 @@ function SeccionRubro({
 }) {
   const listaId = `conceptos-${rubroId ?? "todos"}`;
   const delArea = conceptosParaArea(cat.conceptos, areaId);
+  // Proveedores de este rubro primero; después los que no tienen rubro asignado.
+  const provs = proveedoresParaRubro(cat.proveedores, rubroId);
+  const listaProveedoresId = `proveedores-${rubroId ?? "todos"}`;
   const conceptos = rubroId ? delArea.filter((c) => c.rubro_id === rubroId) : delArea;
   const calc = lineas.map((l) => calcularLinea(aLinea(l), params));
   const costo = calc.reduce((s, r) => s + r.costo, 0);
@@ -456,6 +458,9 @@ function SeccionRubro({
         </span>
       </div>
       <datalist id={listaId}>{conceptos.map((c) => <option key={c.id} value={c.nombre} />)}</datalist>
+      <datalist id={listaProveedoresId}>
+        {[...provs.delRubro, ...provs.sinAsignar].map((x) => <option key={x} value={x} />)}
+      </datalist>
       <div className="-mx-4 overflow-x-auto px-4">
         <fieldset disabled={congelado}>
           {porMedida ? (
@@ -466,7 +471,7 @@ function SeccionRubro({
               params={params}
               congelado={congelado}
               listaId={listaId}
-              proveedores={cat.proveedores}
+              proveedores={provs}
               {...{ setLinea, quitar, cambiarConcepto }}
             />
           ) : (
@@ -503,7 +508,7 @@ function SeccionRubro({
                         {ORIGENES.map((o) => <option key={o.valor} value={o.valor}>{o.etiqueta}</option>)}
                       </select>
                     </td>
-                    <td className="td"><input className="input min-w-32" list="lista-proveedores" value={l.proveedor ?? ""} aria-label="Proveedor" onChange={(e) => setLinea(l.id, { proveedor: e.target.value })} /></td>
+                    <td className="td"><input className="input min-w-32" list={listaProveedoresId} value={l.proveedor ?? ""} aria-label="Proveedor" onChange={(e) => setLinea(l.id, { proveedor: e.target.value })} /></td>
                     <td className="td"><input className="input min-w-24" list="lista-unidades" value={l.unidad ?? ""} aria-label="Unidad" onChange={(e) => setLinea(l.id, usaHoras(e.target.value) ? { unidad: e.target.value } : { unidad: e.target.value, horas: null })} /></td>
                     <td className="td"><CampoPesos valor={l.precio_unitario} etiqueta="Precio unitario" className="input min-w-32" onCambio={(v) => setLinea(l.id, { precio_unitario: v })} /></td>
                     <td className="td"><CampoNumero valor={l.cantidad} etiqueta="Cantidad" className="input min-w-16" onCambio={(v) => setLinea(l.id, { cantidad: v })} /></td>

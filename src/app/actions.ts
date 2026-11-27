@@ -364,8 +364,31 @@ export async function guardarRubro(_: Resultado, form: FormData): Promise<Result
 export async function guardarProveedor(_: Resultado, form: FormData): Promise<Resultado> {
   const parsed = z.object({ id: z.string().uuid().optional(), nombre: z.string().trim().min(1) }).safeParse(Object.fromEntries(form));
   if (!parsed.success) return error("Completá el nombre");
-  const { id, ...fila } = parsed.data;
-  return guardarFila("proveedores", id, { ...fila, activo: activoDe(form) }, "/configuracion", "Proveedor guardado");
+  const rubros = z.array(z.string().uuid()).safeParse(form.getAll("rubros"));
+  if (!rubros.success) return error("Revisá los rubros");
+  const { id, ...datos } = parsed.data;
+  const fila = { ...datos, activo: activoDe(form) };
+  const supabase = await db();
+
+  let proveedorId = id;
+  if (id) {
+    const { error: e } = await supabase.from("proveedores").update(fila).eq("id", id);
+    if (e) return error(e.code === "23505" ? "Ya existe un proveedor con ese nombre" : e.message);
+  } else {
+    const { data, error: e } = await supabase.from("proveedores").insert(fila).select("id").single();
+    if (e) return error(e.code === "23505" ? "Ya existe un proveedor con ese nombre" : e.message);
+    proveedorId = data.id as string;
+  }
+
+  // Rubros en los que trabaja: se reemplazan por los tildados.
+  const del = await supabase.from("proveedor_rubros").delete().eq("proveedor_id", proveedorId);
+  if (del.error) return error(del.error.message);
+  if (rubros.data.length) {
+    const ins = await supabase.from("proveedor_rubros").insert(rubros.data.map((rubro_id) => ({ proveedor_id: proveedorId, rubro_id })));
+    if (ins.error) return error(ins.error.message);
+  }
+  revalidatePath("/configuracion");
+  return { ok: true, mensaje: "Proveedor guardado" };
 }
 
 export async function guardarResponsable(_: Resultado, form: FormData): Promise<Resultado> {

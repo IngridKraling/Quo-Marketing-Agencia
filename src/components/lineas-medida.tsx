@@ -63,15 +63,21 @@ function Comparaciones({ l, c, markup, params }: { l: LineaInput; c: Comparacion
   } else if (c.unitario && l.proveedor) {
     frases.push({ tono: "info", texto: <>Es la primera vez que <b>{l.proveedor}</b> cotiza este concepto: no hay con qué comparar.</> });
   }
-  // El promedio solo suma si incluye otras cotizaciones además de la última de este proveedor.
-  const promedioRepetido = c.promedio && c.ultimaDelProveedor && c.promedio.cantidad === 1 && c.promedio.valor === c.ultimaDelProveedor.valor;
-  if (c.promedio && !promedioRepetido) {
+  // ¿Hay otro proveedor que lo haya cotizado más barato en los últimos 6 meses?
+  if (c.otroMasBarato && c.unitario) {
+    const o = c.otroMasBarato;
+    const n = Math.round(o.difPct);
     frases.push({
-      tono: "info",
+      tono: n > 0 ? "alerta" : "info",
       texto: (
         <>
-          Promedio de <b>todos los proveedores</b> en los últimos 6 meses: <b>{pesos(c.promedio.valor)} {unidad}</b> ({c.promedio.cantidad}{" "}
-          {c.promedio.cantidad === 1 ? "cotización" : "cotizaciones"}) → hoy está <Diferencia pct={c.promedio.difPct} />.
+          De otros proveedores, el más barato fue <b>{o.proveedor}</b>: <b>{pesos(o.valor)} {unidad}</b> ({fecha(o.fecha)},{" "}
+          <LinkPpto id={o.presupuestoId} codigo={o.codigo} />)
+          {n > 0 ? (
+            <> → {l.proveedor ? <b>{l.proveedor}</b> : "esta cotización"} está <Diferencia pct={o.difPct} />.</>
+          ) : (
+            <> → {l.proveedor ? <b>{l.proveedor}</b> : "esta cotización"} sigue siendo la más conveniente.</>
+          )}
         </>
       ),
     });
@@ -153,7 +159,8 @@ export function TablaMedidas({
   params: Parametros;
   congelado: boolean;
   listaId: string;
-  proveedores: string[];
+  /** Proveedores del rubro y, aparte, los que no tienen rubro asignado. */
+  proveedores: { delRubro: string[]; sinAsignar: string[] };
   setLinea: (id: string, c: Partial<LineaInput>) => void;
   quitar: (id: string) => void;
   cambiarConcepto: (l: LineaInput, texto: string) => void;
@@ -182,7 +189,7 @@ export function TablaMedidas({
           const r = calc[i];
           const c = comparaciones[i];
           const m2 = metros2(medidaDe(l));
-          const opcionesProveedor = l.proveedor && !proveedores.includes(l.proveedor) ? [l.proveedor, ...proveedores] : proveedores;
+          const enLista = !!l.proveedor && [...proveedores.delRubro, ...proveedores.sinAsignar].includes(l.proveedor);
           const mantieneAnterior = !!c.anterior?.mismoCosto && r.markup === c.anterior.markup;
           return (
             <Fragment key={l.id}>
@@ -194,7 +201,13 @@ export function TablaMedidas({
                 <td className="td">
                   <select className="input min-w-36" value={l.proveedor ?? ""} aria-label="Proveedor" onChange={(e) => setLinea(l.id, { proveedor: e.target.value || null })}>
                     <option value="">— Elegir —</option>
-                    {opcionesProveedor.map((x) => <option key={x} value={x}>{x}</option>)}
+                    {l.proveedor && !enLista && <option value={l.proveedor}>{l.proveedor}</option>}
+                    {proveedores.delRubro.map((x) => <option key={x} value={x}>{x}</option>)}
+                    {proveedores.sinAsignar.length > 0 && (
+                      <optgroup label={proveedores.delRubro.length ? "Otros (sin rubro asignado)" : "Proveedores"}>
+                        {proveedores.sinAsignar.map((x) => <option key={x} value={x}>{x}</option>)}
+                      </optgroup>
+                    )}
                   </select>
                 </td>
                 <td className="td"><CampoNumero valor={l.base ?? null} etiqueta="Base (m)" placeholder="—" className="input min-w-16" onCambio={(v) => setLinea(l.id, { base: v || null })} /></td>

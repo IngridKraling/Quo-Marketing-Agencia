@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alfabetico, conceptosParaArea, opcionesMarca, rubrosParaArea } from "./opciones";
+import { alfabetico, conceptosParaArea, opcionesMarca, proveedoresParaRubro, rubrosParaArea } from "./opciones";
 
 describe("desplegables", () => {
   it("ordena A → Z con OTROS al final", () => {
@@ -47,5 +47,21 @@ describe("conceptosParaArea", () => {
     expect(conceptosParaArea(conceptos, "trade").map((c) => c.n)).toEqual(["Supervisor", "Flete"]);
     expect(conceptosParaArea(conceptos, "btl")).toHaveLength(3);
     expect(conceptosParaArea(conceptos, null)).toHaveLength(3);
+  });
+});
+
+describe("proveedoresParaRubro", () => {
+  const provs = [
+    { nombre: "Publisite", rubroIds: ["carteles", "lonas", "estructuras"] },
+    { nombre: "MG Grafica", rubroIds: ["vinilos", "carteles"] },
+    { nombre: "Sonido SA", rubroIds: ["tecnica"] },
+    { nombre: "Nuevo", rubroIds: [] },
+  ];
+  it("primero los del rubro y aparte los sin asignar; los de otros rubros no", () => {
+    expect(proveedoresParaRubro(provs, "carteles")).toEqual({ delRubro: ["MG Grafica", "Publisite"], sinAsignar: ["Nuevo"] });
+    expect(proveedoresParaRubro(provs, "toldos")).toEqual({ delRubro: [], sinAsignar: ["Nuevo"] });
+  });
+  it("si no queda ninguno, ofrece todos", () => {
+    expect(proveedoresParaRubro(provs.slice(0, 3), "toldos").sinAsignar).toEqual(["MG Grafica", "Publisite", "Sonido SA"]);
   });
 });

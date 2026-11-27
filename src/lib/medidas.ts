@@ -7,7 +7,7 @@
  *
  * Comparaciones (se excluyen el presupuesto actual y los cancelados):
  *   · Mismo proveedor: la última cotización de ese proveedor para ese concepto.
- *   · Todos los proveedores: promedio de los últimos 6 meses.
+ *   · Otro proveedor más barato: la cotización más baja de OTRO proveedor para ese concepto en los últimos 6 meses.
  *   · Markup a respetar: el último presupuesto ENVIADO (enviado en adelante, rechazados incluidos) con el
  *     mismo concepto, proveedor, medidas y costo por pieza. Si lo hay, la línea mantiene ese markup
  *     para no cambiarle el precio al cliente.
@@ -72,8 +72,8 @@ export type Comparacion = {
   unitario: { valor: number; por: "m2" | "pieza" } | null;
   /** Última cotización del mismo proveedor (mismo tipo de unidad). */
   ultimaDelProveedor: { valor: number; fecha: string | null; codigo: string | null; presupuestoId: string; difPct: number } | null;
-  /** Promedio de todos los proveedores en los últimos 6 meses. */
-  promedio: { valor: number; cantidad: number; difPct: number } | null;
+  /** La cotización más baja de otro proveedor en los últimos 6 meses (difPct: cuánto más caro/barato está esta). */
+  otroMasBarato: { proveedor: string; valor: number; fecha: string | null; codigo: string | null; presupuestoId: string; difPct: number } | null;
   /** Último presupuesto enviado con el mismo concepto, proveedor y medidas. */
   anterior: {
     presupuestoId: string;
@@ -92,7 +92,7 @@ export function comparar(linea: Medida, refs: Referencia[], presupuestoId: strin
   const unitario = costoUnitario(linea);
 
   let ultimaDelProveedor: Comparacion["ultimaDelProveedor"] = null;
-  let promedio: Comparacion["promedio"] = null;
+  let otroMasBarato: Comparacion["otroMasBarato"] = null;
   if (unitario) {
     const delMismoTipo = candidatas
       .map((r) => ({ r, u: costoUnitario(r) }))
@@ -102,10 +102,18 @@ export function comparar(linea: Medida, refs: Referencia[], presupuestoId: strin
       ultimaDelProveedor = { valor: prov.u.valor, fecha: prov.r.fecha, codigo: prov.r.codigo, presupuestoId: prov.r.presupuestoId, difPct: dif(unitario.valor, prov.u.valor) };
     }
     const desde = mesesAntes(hoy, 6);
-    const recientes = delMismoTipo.filter((x) => (x.r.fecha ?? "") >= desde);
-    if (recientes.length) {
-      const valor = redondear(recientes.reduce((s, x) => s + x.u.valor, 0) / recientes.length);
-      promedio = { valor, cantidad: recientes.length, difPct: dif(unitario.valor, valor) };
+    const otro = delMismoTipo
+      .filter((x) => (x.r.fecha ?? "") >= desde && !!normalizar(x.r.proveedor) && !mismoProveedor(linea, x.r))
+      .sort((a, b) => a.u.valor - b.u.valor || masReciente(a.r, b.r))[0];
+    if (otro) {
+      otroMasBarato = {
+        proveedor: otro.r.proveedor!,
+        valor: otro.u.valor,
+        fecha: otro.r.fecha,
+        codigo: otro.r.codigo,
+        presupuestoId: otro.r.presupuestoId,
+        difPct: dif(unitario.valor, otro.u.valor),
+      };
     }
   }
 
@@ -127,5 +135,5 @@ export function comparar(linea: Medida, refs: Referencia[], presupuestoId: strin
     };
   }
 
-  return { unitario, ultimaDelProveedor, promedio, anterior };
+  return { unitario, ultimaDelProveedor, otroMasBarato, anterior };
 }

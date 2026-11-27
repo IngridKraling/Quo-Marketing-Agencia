@@ -36,7 +36,7 @@ async function Contenido() {
     supabase.from("impuestos_venta").select("*").order("orden"),
     supabase.from("rubros").select("*").order("orden"),
     supabase.from("areas").select("*").order("orden"),
-    supabase.from("proveedores").select("*").order("nombre"),
+    supabase.from("proveedores").select("*, proveedor_rubros(rubro_id)").order("nombre"),
     supabase.from("responsables").select("*").order("nombre"),
     supabase.from("markup_tramos").select("*"),
   ]);
@@ -45,6 +45,30 @@ async function Contenido() {
     (tramos ?? [])
       .filter((t) => t.area_id === areaId)
       .sort((a, b) => (a.hasta == null ? Infinity : Number(a.hasta)) - (b.hasta == null ? Infinity : Number(b.hasta)));
+  // Rubros agrupados por área, para tildar en cada proveedor.
+  const gruposRubros = [
+    { titulo: "Comunes", rubros: (rubros ?? []).filter((r) => !r.area_id) },
+    ...(areas ?? []).map((a) => ({ titulo: a.nombre as string, rubros: (rubros ?? []).filter((r) => r.area_id === a.id) })),
+  ].filter((g) => g.rubros.length);
+  const rubrosProveedor = (marcados: string[]) => (
+    <details className="text-xs">
+      <summary className="cursor-pointer text-zinc-600">
+        Rubros: {marcados.length ? (rubros ?? []).filter((r) => marcados.includes(r.id)).map((r) => r.nombre).join(", ") : <i>sin asignar</i>}
+      </summary>
+      <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        {gruposRubros.map((g) => (
+          <fieldset key={g.titulo} className="space-y-1">
+            <legend className="font-semibold text-zinc-700">{g.titulo}</legend>
+            {g.rubros.map((r) => (
+              <label key={r.id} className="flex items-center gap-1">
+                <input type="checkbox" name="rubros" value={r.id} defaultChecked={marcados.includes(r.id)} /> {r.nombre}
+              </label>
+            ))}
+          </fieldset>
+        ))}
+      </div>
+    </details>
+  );
   const areaSelect = (valor: string | null) => (
     <select name="area_id" defaultValue={valor ?? ""} className="input w-40" aria-label="Área">
       <option value="">Común (todas)</option>
@@ -208,18 +232,28 @@ async function Contenido() {
       </section>
 
       <section className="card space-y-3 lg:col-span-2">
-        <h2 className="font-medium">Proveedores</h2>
-        <div className="grid gap-2 md:grid-cols-2">
+        <div>
+          <h2 className="font-medium">Proveedores</h2>
+          <p className="text-sm text-zinc-500">
+            Tildá los rubros en los que trabaja cada proveedor (puede ser de varias áreas). En un presupuesto, cada línea muestra solo los
+            proveedores de su rubro y, aparte, los que todavía no tienen rubros asignados.
+          </p>
+        </div>
+        <div className="space-y-2">
           {proveedores?.map((p) => (
-            <FormAccion key={p.id} action={guardarProveedor} boton="Guardar" variante="sec" className="flex flex-wrap items-center gap-2">
-              <input type="hidden" name="id" value={p.id} />
-              <input name="nombre" defaultValue={p.nombre} className="input w-52" aria-label="Nombre" />
-              <Activo valor={p.activo} />
+            <FormAccion key={p.id} action={guardarProveedor} boton="Guardar" variante="sec" className="space-y-2 rounded-md border border-zinc-200 p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <input type="hidden" name="id" value={p.id} />
+                <input name="nombre" defaultValue={p.nombre} className="input w-52" aria-label="Nombre" />
+                <Activo valor={p.activo} />
+              </div>
+              {rubrosProveedor(((p.proveedor_rubros as { rubro_id: string }[] | null) ?? []).map((r) => r.rubro_id))}
             </FormAccion>
           ))}
         </div>
-        <FormAccion action={guardarProveedor} boton="Agregar" className="flex flex-wrap items-center gap-2 border-t border-zinc-200 pt-3">
+        <FormAccion action={guardarProveedor} boton="Agregar" className="space-y-2 border-t border-zinc-200 pt-3">
           <input name="nombre" placeholder="Proveedor nuevo" required className="input w-52" />
+          {rubrosProveedor([])}
         </FormAccion>
       </section>
     </div>
