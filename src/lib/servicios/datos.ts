@@ -1,6 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { numONull, type Origen, type Parametros, type RubroInfo } from "@/lib/presupuesto-calc";
+import { numONull, type Origen, type Parametros, type RubroInfo, type TramoArea } from "@/lib/presupuesto-calc";
 import { alfabetico, type Marca } from "@/lib/opciones";
 
 export type Concepto = {
@@ -21,6 +21,8 @@ export type Opcion = { id: string; nombre: string };
 export type Catalogo = {
   parametros: Parametros & { ivaPct: number };
   rubros: RubroInfo[];
+  /** Tramos de markup de todas las áreas (se filtran con paramsDeArea según el área del presupuesto). */
+  tramos: TramoArea[];
   conceptos: Concepto[];
   proveedores: string[];
   areas: Opcion[];
@@ -46,12 +48,20 @@ export async function parametros(): Promise<Parametros & { ivaPct: number }> {
   };
 }
 
+/** Tramos de markup por área (Trade: según el costo total del presupuesto). */
+export async function tramos(): Promise<TramoArea[]> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("markup_tramos").select("area_id, hasta, markup");
+  return (data ?? []).map((t) => ({ areaId: t.area_id, hasta: numONull(t.hasta), markup: Number(t.markup) }));
+}
+
 /** Todo lo que necesitan el editor y la carga de costos reales. */
 export async function catalogo(): Promise<Catalogo> {
   const supabase = await createClient();
-  const [params, rubros, conceptos, proveedores, areas, clientes, marcas, responsables] = await Promise.all([
+  const [params, listaTramos, rubros, conceptos, proveedores, areas, clientes, marcas, responsables] = await Promise.all([
     parametros(),
-    supabase.from("rubros").select("id, nombre, alerta_sin_cotizar, revisar_si_se_usa").eq("activo", true).order("orden"),
+    tramos(),
+    supabase.from("rubros").select("id, nombre, alerta_sin_cotizar, revisar_si_se_usa, area_id").eq("activo", true).order("orden"),
     supabase.from("conceptos").select("*, proveedores(nombre)").eq("activo", true).order("nombre"),
     supabase.from("proveedores").select("nombre").eq("activo", true).order("nombre"),
     supabase.from("areas").select("id, nombre").eq("activo", true).order("orden"),
@@ -61,7 +71,14 @@ export async function catalogo(): Promise<Catalogo> {
   ]);
   return {
     parametros: params,
-    rubros: (rubros.data ?? []).map((r) => ({ id: r.id, nombre: r.nombre, alertaSinCotizar: r.alerta_sin_cotizar, revisarSiSeUsa: r.revisar_si_se_usa })),
+    tramos: listaTramos,
+    rubros: (rubros.data ?? []).map((r) => ({
+      id: r.id,
+      nombre: r.nombre,
+      alertaSinCotizar: r.alerta_sin_cotizar,
+      revisarSiSeUsa: r.revisar_si_se_usa,
+      areaId: r.area_id,
+    })),
     conceptos: (conceptos.data ?? []).map((c) => ({
       id: c.id,
       rubro_id: c.rubro_id,

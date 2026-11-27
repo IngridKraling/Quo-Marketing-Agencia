@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   calcularLinea,
+  conTramo,
+  markupDeTramo,
   controlProyecto,
   costoReal,
   erroresParaAprobar,
@@ -143,5 +145,47 @@ describe("controlProyecto", () => {
     expect(c.presupuestado.costo).toBe(180000);
     // Desvío total de costos: 200.000 real vs. 180.000 presupuestado.
     expect(c.desvio).toEqual({ costo: 20000, costoPct: 11.11 });
+  });
+});
+
+describe("markup por tramo (Trade)", () => {
+  const TRAMOS = [
+    { hasta: 2000000, markup: 1.6 },
+    { hasta: null, markup: 1.5 },
+    { hasta: 1000000, markup: 1.7 },
+    { hasta: 3500000, markup: 1.55 },
+  ];
+  const linea = (costo: number, extra: Partial<Linea> = {}): Linea => ({
+    rubroId: "Carteles", precioUnitario: costo, cantidad: 1, horas: null, dias: null, markup: null, markupConcepto: 1.4, ...extra,
+  });
+
+  it("'hasta' incluye el monto y el último tramo no tiene tope", () => {
+    expect(markupDeTramo(0, TRAMOS)).toBe(1.7);
+    expect(markupDeTramo(1000000, TRAMOS)).toBe(1.7);
+    expect(markupDeTramo(1000000.01, TRAMOS)).toBe(1.6);
+    expect(markupDeTramo(2000000, TRAMOS)).toBe(1.6);
+    expect(markupDeTramo(3500000, TRAMOS)).toBe(1.55);
+    expect(markupDeTramo(9000000, TRAMOS)).toBe(1.5);
+    expect(markupDeTramo(500, [])).toBeNull();
+  });
+
+  it("el tramo sale del costo total y pisa el markup del concepto", () => {
+    const r = resumenPresupuesto([linea(600000), linea(600000)], [], { ...P, tramos: TRAMOS });
+    expect(r.costo).toBe(1200000);
+    expect(r.markupTramo).toBe(1.6);
+    expect(r.venta).toBe(1920000);
+  });
+
+  it("el markup cargado a mano en la línea sigue mandando", () => {
+    const r = resumenPresupuesto([linea(600000, { markup: 2 }), linea(400000)], [], { ...P, tramos: TRAMOS });
+    expect(r.markupTramo).toBe(1.7);
+    expect(r.venta).toBe(600000 * 2 + 400000 * 1.7);
+  });
+
+  it("sin tramos se usa el markup del concepto, como siempre", () => {
+    const r = resumenPresupuesto([linea(600000)], [], P);
+    expect(r.markupTramo).toBeNull();
+    expect(r.venta).toBe(840000);
+    expect(conTramo([linea(1)], P).markupTramo).toBeNull();
   });
 });

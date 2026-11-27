@@ -6,13 +6,15 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import {
   ESTADOS,
+  conTramo,
   erroresParaAprobar,
   estaCongelado,
   lineaDesdeFila,
+  paramsDeArea,
   resumenPresupuesto,
   type Estado,
 } from "@/lib/presupuesto-calc";
-import { catalogo, parametros } from "@/lib/servicios/datos";
+import { catalogo, parametros, tramos } from "@/lib/servicios/datos";
 import { construirImportFactura, configFacturacionDesdeEnv } from "@/lib/sigma/factura";
 import { SigmaError, sigmaRequest } from "@/lib/sigma/client";
 import { sincronizarClientesSigma } from "@/lib/servicios/sync";
@@ -119,7 +121,9 @@ export async function aprobarPresupuesto(id: string): Promise<Resultado> {
   const errores = erroresParaAprobar(lineas);
   if (errores.length) return error(`No se puede aprobar: ${errores.join(" · ")}`);
 
-  const resumen = resumenPresupuesto(lineas, cat.rubros, cat.parametros);
+  // Se guardan los parámetros con el tramo ya resuelto, para que la versión aprobada no cambie después.
+  const params = conTramo(lineas, paramsDeArea(cat.parametros, cat.tramos, p.area_id));
+  const resumen = resumenPresupuesto(lineas, cat.rubros, params);
   const { presupuesto_lineas, ...cabecera } = p;
   const ahora = new Date().toISOString();
   const v = await supabase.from("presupuesto_versiones").upsert(
@@ -131,7 +135,7 @@ export async function aprobarPresupuesto(id: string): Promise<Resultado> {
         cabecera,
         lineas: [...presupuesto_lineas].filter((l: { presupuestada: boolean }) => l.presupuestada).sort((a: { orden: number }, b: { orden: number }) => a.orden - b.orden),
         totales: { costo: resumen.costo, venta: resumen.venta, impuestos: resumen.impuestos, contribucion: resumen.contribucion, margenPct: resumen.margenPct },
-        parametros: cat.parametros,
+        parametros: params,
       },
     },
     { onConflict: "presupuesto_id,version" },
@@ -302,7 +306,7 @@ export async function guardarConcepto(_: Resultado, form: FormData): Promise<Res
 
 export async function guardarRubro(_: Resultado, form: FormData): Promise<Resultado> {
   const parsed = z
-    .object({ id: z.string().uuid().optional(), nombre: z.string().trim().min(1), orden: z.coerce.number().int() })
+    .object({ id: z.string().uuid().optional(), nombre: z.string().trim().min(1), orden: z.coerce.number().int(), area_id: uuidOpc })
     .safeParse(Object.fromEntries(form));
   if (!parsed.success) return error("Revisá nombre y orden");
   const { id, ...fila } = parsed.data;
@@ -327,6 +331,35 @@ export async function guardarResponsable(_: Resultado, form: FormData): Promise<
   if (!parsed.success) return error("Completá el nombre");
   const { id, ...fila } = parsed.data;
   return guardarFila("responsables", id, { ...fila, activo: activoDe(form) }, "/configuracion", "Responsable guardado");
+}
+
+/** Tramo de markup por costo total. "Hasta" vacío = último tramo, sin tope. */
+export async function guardarTramo(_: Resultado, form: FormData): Promise<Resultado> {
+  const parsed = z
+    .object({
+      id: z.string().uuid().optional(),
+      area_id: z.string().uuid(),
+      hasta: numOpc.refine((v) => v == null || v > 0, "El tope tiene que ser mayor que 0"),
+      markup: num.positive("El markup es un multiplicador mayor que 0 (ej. 1,6)"),
+    })
+    .safeParse(Object.fromEntries(form));
+  if (!parsed.success) return error(parsed.error.issues[0]?.message ?? "Revisá tope y markup");
+  const { id, ...fila } = parsed.data;
+  const supabase = await db();
+  const { error: e } = id ? await supabase.from("markup_tramos").update(fila).eq("id", id) : await supabase.from("markup_tramos").insert(fila);
+  if (e) return error(e.code === "23505" ? "Ya hay un tramo con ese tope (o ya existe el tramo sin tope)" : e.message);
+  revalidatePath("/configuracion");
+  return { ok: true, mensaje: "Tramo guardado" };
+}
+
+export async function eliminarTramo(_: Resultado, form: FormData): Promise<Resultado> {
+  const id = z.string().uuid().safeParse(form.get("id"));
+  if (!id.success) return error("Tramo inválido");
+  const supabase = await db();
+  const { error: e } = await supabase.from("markup_tramos").delete().eq("id", id.data);
+  if (e) return error(e.message);
+  revalidatePath("/configuracion");
+  return { ok: true, mensaje: "Tramo eliminado" };
 }
 
 export async function guardarArea(_: Resultado, form: FormData): Promise<Resultado> {
@@ -445,9 +478,10 @@ export async function facturarPresupuesto(_: Resultado, form: FormData): Promise
   const d = parsed.data;
   const supabase = await db();
 
-  const [{ data: p }, params] = await Promise.all([
+  const [{ data: p }, paramsBase, listaTramos] = await Promise.all([
     supabase.from("presupuestos").select("*, clientes(*), presupuesto_lineas(*)").eq("id", d.presupuesto_id).single(),
     parametros(),
+    tramos(),
   ]);
   if (!p) return error("Presupuesto no encontrado");
   if (p.estado === "facturado") return error("El presupuesto ya está facturado");
@@ -457,6 +491,7 @@ export async function facturarPresupuesto(_: Resultado, form: FormData): Promise
     return error("Completá tipo de IVA y condición de venta del cliente en Clientes");
   }
 
+  const params = paramsDeArea(paramsBase, listaTramos, p.area_id);
   const venta = resumenPresupuesto(p.presupuesto_lineas.map(lineaDesdeFila), [], params).venta;
   const facturaId = crypto.randomUUID();
   let payload;

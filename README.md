@@ -9,12 +9,16 @@ Stack: Next.js 16 (App Router) en Vercel · Supabase (Postgres + Auth) · TypeSc
 
 - **Conceptos**: la base de todo lo que se presupuesta (rubro, unidad, origen Propio / Proveedor / Personal, tarifa de costo,
   proveedor habitual, markup propio, “por defecto”). La migración trae precargado el catálogo de la planilla.
+  Cada rubro es de un área (BTL, Trade…) o **común** (Personal, Logística y flete, Viáticos, Otros); un presupuesto ofrece los
+  rubros de su área más los comunes (un área sin rubros propios ve todo). Para algo fuera de catálogo: concepto **OTROS**.
 - **Presupuesto**: cabecera (cliente, marca, área, proyecto/evento, fecha de elaboración, fecha del evento, responsable) y líneas por rubro.
   Cliente, marca y responsable son desplegables (A → Z, con “OTROS” siempre al final). Las marcas dependen del cliente y se
   editan en **Clientes**; todos los clientes tienen además la marca “OTROS”. Los responsables se editan en **Configuración**.
   El ID se asigna solo: `<prefijo del área>-<código del cliente>-<correlativo>` (ej. `BTL-CCU-001`).
   - costo = precio × cantidad × horas × días (vacío = 1)
-  - markup = el de la línea › el del concepto › el general (multiplicador: 1,4 = +40 %)
+  - markup = el de la línea › el del tramo › el del concepto › el general (multiplicador: 1,4 = +40 %)
+  - **markup por tramo** (Trade): según el costo total del presupuesto (hasta $1.000.000 ×1,7; hasta $2.000.000 ×1,6;
+    hasta $3.500.000 ×1,55; más ×1,5). Se edita en Configuración; “hasta” incluye el monto.
   - venta = costo × markup · impuestos s/venta = venta × impuestos activos (IIBB) · contribución = venta − costo − impuestos
   - alertas por rubro: sin cotizar, revisar “Otros”, margen bajo.
 - **Aprobar y congelar**: valida (sin cantidades en 0, sin líneas sin rubro ni precio), guarda una copia de la versión y la bloquea.

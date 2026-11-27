@@ -14,3 +14,12 @@ export const alfabetico = (a: string, b: string) =>
 export function opcionesMarca(marcas: Marca[], clienteId: string | null): string[] {
   return [...marcas.filter((m) => m.cliente_id === clienteId && !esOtros(m.nombre)).map((m) => m.nombre).sort(alfabetico), OTROS];
 }
+
+/**
+ * Rubros que se ofrecen en un presupuesto según su área: los del área más los comunes (sin área).
+ * Si el área todavía no tiene rubros propios (Proyectos especiales, Otros), se ofrecen todos.
+ */
+export function rubrosParaArea<R extends { areaId?: string | null }>(rubros: R[], areaId: string | null): R[] {
+  if (!areaId || !rubros.some((r) => r.areaId === areaId)) return rubros;
+  return rubros.filter((r) => !r.areaId || r.areaId === areaId);
+}

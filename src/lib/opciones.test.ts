@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alfabetico, opcionesMarca } from "./opciones";
+import { alfabetico, opcionesMarca, rubrosParaArea } from "./opciones";
 
 describe("desplegables", () => {
   it("ordena A → Z con OTROS al final", () => {
@@ -21,5 +21,22 @@ describe("desplegables", () => {
     ];
     expect(opcionesMarca(marcas, "ccu")).toEqual(["CERVEZA NORTE", "CERVEZA SALTA", "OTROS"]);
     expect(opcionesMarca(marcas, "sin-marcas")).toEqual(["OTROS"]);
+  });
+});
+
+describe("rubrosParaArea", () => {
+  const rubros = [
+    { id: "personal", areaId: null },
+    { id: "tecnica", areaId: "btl" },
+    { id: "carteles", areaId: "trade" },
+    { id: "otros" },
+  ];
+  it("el área ve sus rubros y los comunes", () => {
+    expect(rubrosParaArea(rubros, "trade").map((r) => r.id)).toEqual(["personal", "carteles", "otros"]);
+    expect(rubrosParaArea(rubros, "btl").map((r) => r.id)).toEqual(["personal", "tecnica", "otros"]);
+  });
+  it("un área sin rubros propios, o sin área elegida, ve todo", () => {
+    expect(rubrosParaArea(rubros, "proyectos-especiales")).toHaveLength(4);
+    expect(rubrosParaArea(rubros, null)).toHaveLength(4);
   });
 });

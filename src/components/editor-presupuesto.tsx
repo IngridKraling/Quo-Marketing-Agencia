@@ -15,13 +15,15 @@ import {
   ESTADOS,
   ETIQUETA_ESTADO,
   calcularLinea,
+  conTramo,
   estaCongelado,
+  paramsDeArea,
   resumenPresupuesto,
   type Estado,
   type Origen,
 } from "@/lib/presupuesto-calc";
 import type { Catalogo } from "@/lib/servicios/datos";
-import { opcionesMarca as marcasDelCliente } from "@/lib/opciones";
+import { opcionesMarca as marcasDelCliente, rubrosParaArea } from "@/lib/opciones";
 import { decimal, pesos, porcentaje } from "@/lib/formato";
 import { CampoNumero } from "@/components/campo-numero";
 import { CampoPesos } from "@/components/campo-pesos";
@@ -65,7 +67,8 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo }: Pro
   const [pendiente, startTransition] = useTransition();
   const router = useRouter();
   const congelado = estaCongelado(estado);
-  const params = cat.parametros;
+  // Parámetros del área del presupuesto, con el markup por tramo resuelto según el costo total (Trade).
+  const params = conTramo(p.lineas.map(aLinea), paramsDeArea(cat.parametros, cat.tramos, p.area_id));
 
   const conceptoPorNombre = useMemo(() => new Map(cat.conceptos.map((c) => [c.nombre.toLowerCase(), c])), [cat.conceptos]);
   const conceptoPorId = useMemo(() => new Map(cat.conceptos.map((c) => [c.id, c])), [cat.conceptos]);
@@ -119,7 +122,7 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo }: Pro
   // Secciones: rubros del catálogo que tienen líneas, en su orden; al final, las líneas sin rubro.
   const rubrosConLineas = cat.rubros.filter((r) => p.lineas.some((l) => l.rubro_id === r.id));
   const sinRubro = p.lineas.filter((l) => !l.rubro_id || !cat.rubros.some((r) => r.id === l.rubro_id));
-  const rubrosLibres = cat.rubros.filter((r) => !p.lineas.some((l) => l.rubro_id === r.id));
+  const rubrosLibres = rubrosParaArea(cat.rubros, p.area_id).filter((r) => !p.lineas.some((l) => l.rubro_id === r.id));
 
   function ejecutar(accion: () => Promise<{ ok: boolean; mensaje: string; id?: string } | null>, alTerminar?: (id?: string) => void) {
     startTransition(async () => {
@@ -269,6 +272,9 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo }: Pro
               valor={porcentaje(resumen.margenPct)}
               clase={resumen.venta > 0 && resumen.margenPct < params.margenMinimoPct ? "text-red-700" : ""}
             />
+            {resumen.markupTramo != null && (
+              <Fila label="Markup por tramo (según costo total)" valor={`× ${decimal(resumen.markupTramo)}`} />
+            )}
             <Fila label="Markup promedio" valor={`× ${decimal(resumen.markupPromedio)}`} />
 
             <div className="flex flex-col gap-2 pt-3">
@@ -414,7 +420,7 @@ function SeccionRubro({
                     <td className="td"><CampoNumero valor={l.dias} etiqueta="Días" className="input min-w-16" onCambio={(v) => setLinea(l.id, { dias: v })} /></td>
                     <td className="td text-right tabular-nums">{pesos(r.costo)}</td>
                     <td className="td">
-                      <CampoNumero valor={l.markup} etiqueta="Markup (override)" className="input min-w-16" placeholder={decimal(l.markup_concepto ?? params.markupDefault)} onCambio={(v) => setLinea(l.id, { markup: v })} />
+                      <CampoNumero valor={l.markup} etiqueta="Markup (override)" className="input min-w-16" placeholder={decimal(params.markupTramo ?? l.markup_concepto ?? params.markupDefault)} onCambio={(v) => setLinea(l.id, { markup: v })} />
                     </td>
                     <td className="td text-right tabular-nums">{pesos(r.venta)}</td>
                     <td className={`td text-right tabular-nums ${r.venta > 0 && r.margenPct < params.margenMinimoPct ? "text-red-700" : ""}`}>{r.venta ? porcentaje(r.margenPct) : "—"}</td>
