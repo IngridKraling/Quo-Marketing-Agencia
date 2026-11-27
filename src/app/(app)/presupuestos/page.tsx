@@ -62,7 +62,11 @@ async function Listado() {
       venta: r.venta,
       margenPct: r.venta ? r.margenPct : null,
       costoReal: reales.length ? reales.reduce((s, x) => s + x, 0) : null,
-      facturacion: estadoFacturacion((p.presupuesto_facturas as { fc_numero: string | null }[] | null) ?? []),
+      // Cancelado o rechazado: no está pendiente de facturar.
+      facturacion:
+        p.estado === "cancelado" || p.estado === "rechazado"
+          ? null
+          : estadoFacturacion((p.presupuesto_facturas as { fc_numero: string | null }[] | null) ?? []),
     };
   });
 

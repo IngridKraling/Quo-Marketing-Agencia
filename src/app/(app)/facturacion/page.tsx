@@ -38,7 +38,13 @@ async function Listado() {
 
   // Venta total de cada presupuesto, para avisar si las partes no suman lo mismo.
   const ventas = new Map<string, number>();
-  const filas: FilaFactura[] = data.map((f) => {
+  // Un presupuesto cancelado o rechazado no está pendiente de facturar: solo se muestra lo que ya tiene FC N°.
+  const filas: FilaFactura[] = data
+    .filter((f) => {
+      const estado = (f.presupuestos as unknown as { estado: Estado }).estado;
+      return !((estado === "cancelado" || estado === "rechazado") && !f.fc_numero?.trim());
+    })
+    .map((f) => {
     const p = f.presupuestos as unknown as {
       id: string;
       codigo: string | null;

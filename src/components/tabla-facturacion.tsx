@@ -45,9 +45,9 @@ const aInput = (f: FilaFactura): FacturaInput => ({
   comentarios: f.comentarios || null,
 });
 
-const MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
-/** "2026-11" → "Noviembre 2026". */
-const nombreMes = (aaaamm: string) => `${MESES[Number(aaaamm.slice(5, 7)) - 1]} ${aaaamm.slice(0, 4)}`;
+const MESES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+/** "2026-11" → "Nov 26". */
+const nombreMes = (aaaamm: string) => `${MESES[Number(aaaamm.slice(5, 7)) - 1]} ${aaaamm.slice(2, 4)}`;
 /** Opciones de período: del mes que viene hacia atrás, 18 meses. */
 function opcionesMes(hoy = new Date()) {
   return Array.from({ length: 18 }, (_, i) => {
@@ -66,6 +66,7 @@ export function TablaFacturacion({ filas: iniciales }: { filas: FilaFactura[] })
   const [filas, setFilas] = useState(iniciales);
   const [cliente, setCliente] = useState("");
   const [area, setArea] = useState("");
+  const [marca, setMarca] = useState("");
   const [mostrar, setMostrar] = useState<"" | "pendiente" | "facturado">("pendiente");
   const [texto, setTexto] = useState("");
   const [aviso, setAviso] = useState<{ ok: boolean; texto: string } | null>(null);
@@ -77,6 +78,11 @@ export function TablaFacturacion({ filas: iniciales }: { filas: FilaFactura[] })
   const [fcGuardado, setFcGuardado] = useState<Record<string, string>>(() => Object.fromEntries(iniciales.map((f) => [f.id, f.fc])));
   const facturadaGuardada = (f: FilaFactura) => !!fcGuardado[f.id]?.trim();
 
+  // Marcas: las del cliente elegido (o todas si no hay cliente).
+  const marcas = useMemo(
+    () => [...new Set(iniciales.filter((f) => !cliente || f.cliente === cliente).map((f) => f.marca).filter((m): m is string => !!m))].sort(alfabetico),
+    [iniciales, cliente],
+  );
   const areas = useMemo(() => [...new Set(iniciales.map((f) => f.area).filter((a): a is string => !!a))].sort(alfabetico), [iniciales]);
   const clientes = useMemo(() => [...new Set(iniciales.map((f) => f.cliente).filter((c): c is string => !!c))].sort(alfabetico), [iniciales]);
 
@@ -88,12 +94,13 @@ export function TablaFacturacion({ filas: iniciales }: { filas: FilaFactura[] })
         (f) =>
           (!cliente || f.cliente === cliente) &&
           (!area || f.area === area) &&
+          (!marca || f.marca === marca) &&
           (!mostrar || (mostrar === "facturado" ? facturadaGuardada(f) : !facturadaGuardada(f))) &&
           (!t || `${f.codigo} ${detalle(f)} ${f.oc} ${f.fc}`.toLowerCase().includes(t)),
       )
       .sort((a, b) => alfabetico(a.codigo ?? "", b.codigo ?? "") || a.orden - b.orden);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- facturadaGuardada depende de fcGuardado
-  }, [filas, cliente, area, mostrar, texto, fcGuardado]);
+  }, [filas, cliente, area, marca, mostrar, texto, fcGuardado]);
 
   // Suma de las partes por presupuesto (todas, no solo las visibles).
   const sumaPorPpto = useMemo(() => {
@@ -172,9 +179,16 @@ export function TablaFacturacion({ filas: iniciales }: { filas: FilaFactura[] })
         </label>
         <label className="text-xs text-zinc-500">
           Cliente
-          <select className="input mt-1 block w-48" value={cliente} onChange={(e) => setCliente(e.target.value)}>
+          <select className="input mt-1 block w-48" value={cliente} onChange={(e) => { setCliente(e.target.value); setMarca(""); }}>
             <option value="">Todos</option>
             {clientes.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </label>
+        <label className="text-xs text-zinc-500">
+          Marca
+          <select className="input mt-1 block w-44" value={marca} onChange={(e) => setMarca(e.target.value)}>
+            <option value="">Todas</option>
+            {marcas.map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
         </label>
         <label className="text-xs text-zinc-500">
@@ -219,12 +233,14 @@ export function TablaFacturacion({ filas: iniciales }: { filas: FilaFactura[] })
       )}
 
       <div className="card overflow-x-auto p-0">
-        <table className="w-full min-w-[1300px]">
+        <table className="w-full min-w-[1620px]">
           <thead>
             <tr>
-              <th className="th w-36">Período de facturación</th>
+              <th className="th w-24">Período</th>
               <th className="th">Área</th>
-              <th className="th min-w-72">Detalle</th>
+              <th className="th min-w-40">Cliente</th>
+              <th className="th min-w-36">Marca</th>
+              <th className="th min-w-56">Detalle</th>
               <th className="th text-right">Importe neto</th>
               <th className="th w-32">OC N°</th>
               <th className="th w-36">FC N°</th>
@@ -242,7 +258,7 @@ export function TablaFacturacion({ filas: iniciales }: { filas: FilaFactura[] })
               return (
                 <tr key={f.id} className="align-top">
                   <td className="td">
-                    <select className="input" aria-label="Período de facturación" value={f.periodo} onChange={(e) => guardar(f.id, { periodo: e.target.value })}>
+                    <select className="input w-24 px-1.5 text-xs" aria-label="Período de facturación" value={f.periodo} onChange={(e) => guardar(f.id, { periodo: e.target.value })}>
                       <option value="">—</option>
                       {(meses.some((m) => m.valor === f.periodo) || !f.periodo ? meses : [{ valor: f.periodo, nombre: nombreMes(f.periodo) }, ...meses]).map((m) => (
                         <option key={m.valor} value={m.valor}>{m.nombre}</option>
@@ -251,8 +267,12 @@ export function TablaFacturacion({ filas: iniciales }: { filas: FilaFactura[] })
                   </td>
                   <td className="td whitespace-nowrap bg-zinc-50">{f.area ?? "—"}</td>
                   <td className="td bg-zinc-50">
+                    {f.cliente ?? "—"}
+                  </td>
+                  <td className="td bg-zinc-50">{f.marca ?? "—"}</td>
+                  <td className="td bg-zinc-50">
                     {partes > 1 && <span className="text-zinc-400">↳ </span>}
-                    {detalle(f)}{" "}
+                    <span className="font-medium">{f.titulo}</span>{" "}
                     <Link className="whitespace-nowrap font-mono text-xs text-zinc-500 underline" href={`/presupuestos/${f.presupuestoId}`}>{f.codigo}</Link>
                     {partes > 1 && <span className="ml-1 text-xs text-zinc-500">· parte {f.orden + 1} de {partes}</span>}
                     {descuadre !== 0 && (
@@ -272,10 +292,10 @@ export function TablaFacturacion({ filas: iniciales }: { filas: FilaFactura[] })
                     )}
                   </td>
                   <td className="td">
-                    <input className="input" aria-label="OC N°" value={f.oc} placeholder="—" onChange={(e) => set(f.id, { oc: e.target.value })} onBlur={() => guardar(f.id)} />
+                    <input className="input min-w-28" aria-label="OC N°" value={f.oc} placeholder="—" onChange={(e) => set(f.id, { oc: e.target.value })} onBlur={() => guardar(f.id)} />
                   </td>
                   <td className="td">
-                    <input className="input" aria-label="FC N°" value={f.fc} placeholder="—" onChange={(e) => set(f.id, { fc: e.target.value })} onBlur={() => guardar(f.id)} />
+                    <input className="input min-w-28" aria-label="FC N°" value={f.fc} placeholder="—" onChange={(e) => set(f.id, { fc: e.target.value })} onBlur={() => guardar(f.id)} />
                     <span className={`mt-1 inline-block whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold ${facturada(f) ? VERDE : AMBAR}`}>
                       {facturada(f) ? "Facturado" : "Pendiente de facturar"}
                     </span>
@@ -311,13 +331,13 @@ export function TablaFacturacion({ filas: iniciales }: { filas: FilaFactura[] })
               );
             })}
             {!visibles.length && (
-              <tr><td colSpan={10} className="td py-6 text-center text-sm text-zinc-500">No hay filas con esos filtros.</td></tr>
+              <tr><td colSpan={12} className="td py-6 text-center text-sm text-zinc-500">No hay filas con esos filtros.</td></tr>
             )}
           </tbody>
           {visibles.length > 0 && (
             <tfoot>
               <tr className="border-t border-zinc-200 font-semibold">
-                <td className="td" colSpan={3}>Total de lo que se ve</td>
+                <td className="td" colSpan={5}>Total de lo que se ve</td>
                 <td className="td whitespace-nowrap text-right tabular-nums">{pesos(total)}</td>
                 <td className="td" colSpan={6} />
               </tr>
