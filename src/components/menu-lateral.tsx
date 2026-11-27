@@ -128,10 +128,7 @@ function MenuLateralVista({ salir, pathname }: { salir: () => Promise<void>; pat
           {plegado ? (
             <Image src="/logo-quo-corto.png" alt="quo" width={36} height={36} />
           ) : (
-            <>
-              <Image src="/logo-quo.png" alt="quo·marketing" width={180} height={28} priority />
-              <span className="mt-1 block text-xs font-medium uppercase tracking-wide text-zinc-400">Presupuestos</span>
-            </>
+            <Image src="/logo-quo.png" alt="quo·marketing" width={180} height={28} priority />
           )}
         </Link>
         {enlaces(plegado)}
