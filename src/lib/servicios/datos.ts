@@ -1,6 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { numONull, type Estado, type Origen, type Parametros, type RubroInfo, type TramoArea } from "@/lib/presupuesto-calc";
+import { numONull, type Estado, type ModoRubro, type Origen, type Parametros, type RubroInfo, type TramoArea } from "@/lib/presupuesto-calc";
 import type { Referencia } from "@/lib/medidas";
 import type { ProveedorRubros } from "@/lib/opciones";
 import { alfabetico, type Marca } from "@/lib/opciones";
@@ -95,7 +95,7 @@ export async function catalogo(): Promise<Catalogo> {
   const [params, listaTramos, rubros, conceptos, proveedores, areas, clientes, marcas, responsables] = await Promise.all([
     parametros(),
     tramos(),
-    supabase.from("rubros").select("id, nombre, alerta_sin_cotizar, revisar_si_se_usa, area_id, por_medida").eq("activo", true).order("orden"),
+    supabase.from("rubros").select("id, nombre, alerta_sin_cotizar, revisar_si_se_usa, area_id, por_medida, modo").eq("activo", true).order("orden"),
     supabase.from("conceptos").select("*, proveedores(nombre)").eq("activo", true).order("nombre"),
     supabase.from("proveedores").select("nombre, proveedor_rubros(rubro_id)").eq("activo", true).order("nombre"),
     supabase.from("areas").select("id, nombre").eq("activo", true).order("orden"),
@@ -112,7 +112,8 @@ export async function catalogo(): Promise<Catalogo> {
       alertaSinCotizar: r.alerta_sin_cotizar,
       revisarSiSeUsa: r.revisar_si_se_usa,
       areaId: r.area_id,
-      porMedida: r.por_medida,
+      modo: (r.modo ?? (r.por_medida ? "medida" : "estandar")) as ModoRubro,
+      porMedida: r.modo === "medida" || r.modo === "unidad" || (!r.modo && r.por_medida),
     })),
     conceptos: (conceptos.data ?? []).map((c) => ({
       id: c.id,

@@ -25,6 +25,7 @@ import {
   paramsDeArea,
   resumenPresupuesto,
   type Estado,
+  type ModoRubro,
 } from "@/lib/presupuesto-calc";
 import type { Catalogo } from "@/lib/servicios/datos";
 import { conceptosParaArea, opcionesMarca as marcasDelCliente, proveedoresParaRubro, rubrosParaArea } from "@/lib/opciones";
@@ -296,6 +297,7 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo, refer
               rubroId={r.id}
               lineas={p.lineas.filter((l) => l.rubro_id === r.id)}
               porMedida={!!r.porMedida}
+              modo={r.modo ?? "estandar"}
               comparar={(l) => comparar(medidaDe(l), referencias, p.id ?? null, hoy)}
               areaId={p.area_id}
               {...{ cat, params, congelado, setLinea, quitar, cambiarConcepto }}
@@ -447,6 +449,7 @@ function SeccionRubro({
   cambiarConcepto,
   onAgregar,
   porMedida = false,
+  modo = "estandar",
   comparar: compararLinea,
   areaId,
   arrastre,
@@ -458,6 +461,7 @@ function SeccionRubro({
   rubroId: string | null;
   lineas: LineaInput[];
   porMedida?: boolean;
+  modo?: ModoRubro;
   comparar: (l: LineaInput) => Comparacion;
   cat: Catalogo;
   params: Catalogo["parametros"];
@@ -477,6 +481,13 @@ function SeccionRubro({
   const costo = calc.reduce((s, r) => s + r.costo, 0);
   const venta = calc.reduce((s, r) => s + r.venta, 0);
   const rubroDnd = arrastre && rubroId ? arrastre.elemento("rubro", rubroId, "rubros") : null;
+  // Columnas de la tabla según cómo se cotiza el rubro.
+  const col = {
+    precio: modo === "periodo" ? "Costo unit. / mes" : modo === "salidas" ? "Costo por salida" : "Precio unit.",
+    cantidad: modo === "salidas" ? "Salidas" : modo === "periodo" ? "Cantidad" : "Cant.",
+    horas: modo === "estandar",
+    dias: modo === "salidas" ? null : modo === "periodo" ? "Meses" : "Días",
+  };
   /** Props de arrastre de una fila (solo dentro del mismo rubro). */
   const filaDnd = (id: string) => {
     if (!arrastre) return { className: "" };
@@ -510,6 +521,7 @@ function SeccionRubro({
               congelado={congelado}
               listaId={listaId}
               proveedores={provs}
+              conMedidas={modo === "medida"}
               filaDnd={filaDnd}
               arrastre={arrastre}
               {...{ setLinea, quitar, cambiarConcepto }}
@@ -523,10 +535,10 @@ function SeccionRubro({
                 <th className="th">Observaciones</th>
                 <th className="th w-36">Proveedor</th>
                 <th className="th w-24">Unidad</th>
-                <th className="th w-28">Precio unit.</th>
-                <th className="th w-16">Cant.</th>
-                <th className="th w-16">Horas</th>
-                <th className="th w-16">Días</th>
+                <th className="th w-28">{col.precio}</th>
+                <th className="th w-16">{col.cantidad}</th>
+                {col.horas && <th className="th w-16">Horas</th>}
+                {col.dias && <th className="th w-16">{col.dias}</th>}
                 <th className="th w-28 text-right">Costo</th>
                 <th className="th w-20">Markup</th>
                 <th className="th w-28 text-right">Venta</th>
@@ -550,15 +562,15 @@ function SeccionRubro({
                     <td className="td"><input className="input min-w-24" list="lista-unidades" value={l.unidad ?? ""} aria-label="Unidad" onChange={(e) => setLinea(l.id, usaHoras(e.target.value) ? { unidad: e.target.value } : { unidad: e.target.value, horas: null })} /></td>
                     <td className="td"><CampoPesos valor={l.precio_unitario} etiqueta="Precio unitario" className="input min-w-32" onCambio={(v) => setLinea(l.id, { precio_unitario: v })} /></td>
                     <td className="td"><CampoNumero valor={l.cantidad} etiqueta="Cantidad" className="input min-w-16" onCambio={(v) => setLinea(l.id, { cantidad: v })} /></td>
-                    <td className="td">
+                    {col.horas && <td className="td">
                       {/* Por Unidad o Servicio no se cargan horas (si una línea vieja tiene horas distintas de 1, se siguen mostrando). */}
                       {usaHoras(l.unidad) || (l.horas != null && l.horas !== 1) ? (
                         <CampoNumero valor={l.horas} etiqueta="Horas" className="input min-w-16" onCambio={(v) => setLinea(l.id, { horas: v })} />
                       ) : (
                         <span className="block min-w-16 text-center text-zinc-300" title="Por Unidad o Servicio: solo cantidad y días">—</span>
                       )}
-                    </td>
-                    <td className="td"><CampoNumero valor={l.dias} etiqueta="Días" className="input min-w-16" onCambio={(v) => setLinea(l.id, { dias: v })} /></td>
+                    </td>}
+                    {col.dias && <td className="td"><CampoNumero valor={l.dias} etiqueta={col.dias} className="input min-w-16" onCambio={(v) => setLinea(l.id, { dias: v })} /></td>}
                     <td className="td text-right tabular-nums">{pesos(r.costo)}</td>
                     <td className="td">
                       <CampoNumero valor={l.markup} etiqueta="Markup (override)" className="input min-w-16" placeholder={decimal(params.markupTramo ?? l.markup_concepto ?? params.markupDefault)} onCambio={(v) => setLinea(l.id, { markup: v })} />

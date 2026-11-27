@@ -6,6 +6,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import {
   ESTADOS,
+  MODOS_RUBRO,
   conTramo,
   erroresParaAprobar,
   lineaVacia,
@@ -455,7 +456,13 @@ export async function guardarConcepto(_: Resultado, form: FormData): Promise<Res
 
 export async function guardarRubro(_: Resultado, form: FormData): Promise<Resultado> {
   const parsed = z
-    .object({ id: z.string().uuid().optional(), nombre: z.string().trim().min(1), orden: z.coerce.number().int(), area_id: uuidOpc })
+    .object({
+      id: z.string().uuid().optional(),
+      nombre: z.string().trim().min(1),
+      orden: z.coerce.number().int(),
+      area_id: uuidOpc,
+      modo: z.enum(MODOS_RUBRO).default("estandar"),
+    })
     .safeParse(Object.fromEntries(form));
   if (!parsed.success) return error("Revisá nombre y orden");
   const { id, ...fila } = parsed.data;
@@ -466,7 +473,8 @@ export async function guardarRubro(_: Resultado, form: FormData): Promise<Result
       ...fila,
       alerta_sin_cotizar: form.get("alerta_sin_cotizar") != null,
       revisar_si_se_usa: form.get("revisar_si_se_usa") != null,
-      por_medida: form.get("por_medida") != null,
+      // por_medida se mantiene por compatibilidad: las líneas que se cotizan con la cotización del proveedor.
+      por_medida: fila.modo === "medida" || fila.modo === "unidad",
       activo: activoDe(form),
     },
     "/configuracion",

@@ -11,6 +11,7 @@ import {
 } from "@/app/actions";
 import { CampoPesosForm } from "@/components/campo-pesos-form";
 import { decimal, pesos } from "@/lib/formato";
+import { ETIQUETA_MODO, MODOS_RUBRO } from "@/lib/presupuesto-calc";
 import { FormAccion } from "@/components/form-accion";
 import { createClient } from "@/lib/supabase/server";
 
@@ -117,8 +118,8 @@ async function Contenido() {
           <h2 className="font-medium">Rubros</h2>
           <p className="text-sm text-zinc-500">
             <b>Sin cotizar</b>: avisa si el rubro queda en 0 (logística, viáticos…). <b>Revisar si se usa</b>: avisa si tiene costo (ej. Otros).
-            El <b>área</b> define en qué presupuestos aparece; “Común” aparece en todos. <b>Por medida</b>: las líneas se cargan con base × altura,
-            piezas y cotización total, y se compara el $/m² (Trade).
+            El <b>área</b> define en qué presupuestos aparece; “Común” aparece en todos. <b>Cómo se cotiza</b> define las columnas: por medida
+            (Trade, base × altura y $/m²), por mes (Vía pública), por salidas (Plan de medios) o por unidad (Merchandising, con comparación por proveedor).
           </p>
         </div>
         {rubros?.map((r) => (
@@ -129,7 +130,12 @@ async function Contenido() {
             {areaSelect(r.area_id)}
             <label className="flex items-center gap-1 text-xs"><input type="checkbox" name="alerta_sin_cotizar" defaultChecked={r.alerta_sin_cotizar} /> Sin cotizar</label>
             <label className="flex items-center gap-1 text-xs"><input type="checkbox" name="revisar_si_se_usa" defaultChecked={r.revisar_si_se_usa} /> Revisar si se usa</label>
-            <label className="flex items-center gap-1 text-xs" title="Se cotiza con base × altura, piezas y cotización total (Trade)"><input type="checkbox" name="por_medida" defaultChecked={r.por_medida} /> Por medida</label>
+            <label className="flex items-center gap-1 text-xs text-zinc-500">
+              Cómo se cotiza
+              <select name="modo" defaultValue={r.modo ?? (r.por_medida ? "medida" : "estandar")} className="input w-56 text-xs">
+                {MODOS_RUBRO.map((m) => <option key={m} value={m}>{ETIQUETA_MODO[m]}</option>)}
+              </select>
+            </label>
             <Activo valor={r.activo} />
           </FormAccion>
         ))}
