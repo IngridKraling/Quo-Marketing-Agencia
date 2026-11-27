@@ -8,6 +8,7 @@ import {
   ESTADOS,
   conTramo,
   erroresParaAprobar,
+  lineaVacia,
   estaCongelado,
   lineaDesdeFila,
   markupAplicado,
@@ -138,7 +139,11 @@ export async function aprobarPresupuesto(id: string): Promise<Resultado> {
   ]);
   if (!p) return error("Presupuesto no encontrado");
   if (estaCongelado(p.estado)) return error("Esta versión ya está aprobada");
-  const filas = p.presupuesto_lineas as (Parameters<typeof lineaDesdeFila>[0] & { concepto: string; orden: number })[];
+  const todas = p.presupuesto_lineas as (Parameters<typeof lineaDesdeFila>[0] & { id: string; concepto: string; orden: number })[];
+  // Las líneas que quedaron vacías (cantidad 0 o sin precio) se quitan en vez de frenar la aprobación.
+  const vacias = todas.filter((f) => lineaVacia(lineaDesdeFila(f)));
+  const filas = todas.filter((f) => !vacias.includes(f));
+  if (!filas.some((f) => f.presupuestada)) return error("No se puede aprobar: el presupuesto no tiene líneas completas");
   const porMedida = new Set(cat.rubros.filter((r) => r.porMedida).map((r) => r.id));
   const lineas = filas.map((f) => ({
     ...lineaDesdeFila(f),
@@ -152,7 +157,13 @@ export async function aprobarPresupuesto(id: string): Promise<Resultado> {
   // Se guardan los parámetros con el tramo ya resuelto, para que la versión aprobada no cambie después.
   const params = conTramo(lineas, paramsDeArea(cat.parametros, cat.tramos, p.area_id));
   const resumen = resumenPresupuesto(lineas, cat.rubros, params);
-  const { presupuesto_lineas, ...cabecera } = p;
+  if (vacias.length) {
+    const d = await supabase.from("presupuesto_lineas").delete().in("id", vacias.map((f) => f.id));
+    if (d.error) return error(d.error.message);
+  }
+  // Cabecera sin las líneas (la versión guarda solo las líneas que quedaron).
+  const cabecera = Object.fromEntries(Object.entries(p).filter(([k]) => k !== "presupuesto_lineas"));
+  const presupuesto_lineas = filas;
   const ahora = new Date().toISOString();
   const v = await supabase.from("presupuesto_versiones").upsert(
     {
@@ -183,7 +194,8 @@ export async function aprobarPresupuesto(id: string): Promise<Resultado> {
   revalidatePath("/facturacion");
   revalidatePath("/presupuestos");
   revalidatePath(`/presupuestos/${id}`);
-  return { ok: true, mensaje: `Versión ${p.version} aprobada y congelada` };
+  const quitadas = vacias.length ? ` · se quitaron ${vacias.length} línea(s) vacía(s): ${[...new Set(vacias.map((f) => f.concepto))].join(", ")}` : "";
+  return { ok: true, mensaje: `Versión ${p.version} aprobada y congelada${quitadas}` };
 }
 
 export async function crearNuevaVersion(id: string): Promise<Resultado> {

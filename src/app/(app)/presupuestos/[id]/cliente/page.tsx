@@ -47,9 +47,12 @@ async function Vista({ params, searchParams }: { params: Promise<{ id: string }>
   // Markup por tramo (Trade): sale del costo total de estas mismas líneas.
   const pCalc = conTramo(filas.map(lineaDesdeFila), params_);
   const lineas = filas.sort((a, b) => a.orden - b.orden).map((f) => ({ f, r: calcularLinea(lineaDesdeFila(f), pCalc) }));
+  // Rubros en el orden en que se acomodaron en el presupuesto (el de su primera línea).
+  const primera = (rubroId: string) => lineas.findIndex((x) => x.f.rubro_id === rubroId);
   const grupos = (rubros ?? [])
     .map((rubro) => ({ rubro, items: lineas.filter((x) => x.f.rubro_id === rubro.id) }))
-    .filter((g) => g.items.length);
+    .filter((g) => g.items.length)
+    .sort((a, b) => primera(a.rubro.id) - primera(b.rubro.id));
   const sinRubro = lineas.filter((x) => !(rubros ?? []).some((r) => r.id === x.f.rubro_id));
   if (sinRubro.length) grupos.push({ rubro: { id: "otros", nombre: "Otros", orden: 999 }, items: sinRubro });
 

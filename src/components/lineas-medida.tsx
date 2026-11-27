@@ -7,6 +7,7 @@ import { CampoNumero } from "@/components/campo-numero";
 import { CampoPesos } from "@/components/campo-pesos";
 import { decimal, fecha, pesos, porcentaje } from "@/lib/formato";
 import { metros2, type Comparacion } from "@/lib/medidas";
+import { AccionesLinea, type Arrastre } from "@/components/flechas-linea";
 import type { Parametros, Resultado } from "@/lib/presupuesto-calc";
 
 /** Medida de una línea del editor, para calcular y comparar. */
@@ -152,6 +153,8 @@ export function TablaMedidas({
   setLinea,
   quitar,
   cambiarConcepto,
+  filaDnd,
+  arrastre,
 }: {
   lineas: LineaInput[];
   calc: (Resultado & { markup: number })[];
@@ -164,6 +167,9 @@ export function TablaMedidas({
   setLinea: (id: string, c: Partial<LineaInput>) => void;
   quitar: (id: string) => void;
   cambiarConcepto: (l: LineaInput, texto: string) => void;
+  /** Props de arrastre de cada fila y el arrastre del editor (para la manija). */
+  filaDnd: (id: string) => Record<string, unknown> & { className: string };
+  arrastre?: Arrastre;
 }) {
   return (
     <table className="w-full min-w-[1250px]">
@@ -191,11 +197,12 @@ export function TablaMedidas({
           const m2 = metros2(medidaDe(l));
           const enLista = !!l.proveedor && [...proveedores.delRubro, ...proveedores.sinAsignar].includes(l.proveedor);
           const mantieneAnterior = !!c.anterior?.mismoCosto && r.markup === c.anterior.markup;
+          const { className: dndClase, ...dnd } = filaDnd(l.id);
           return (
             <Fragment key={l.id}>
-              <tr className={!l.proveedor ? "bg-amber-50/60" : ""}>
-                <td className="td w-6 pr-0">
-                  {!congelado && <button type="button" className="text-zinc-400 hover:text-red-600" onClick={() => quitar(l.id)} aria-label="Quitar línea" title="Quitar línea">✕</button>}
+              <tr {...dnd} className={`${!l.proveedor ? "bg-amber-50/60" : ""} ${dndClase}`}>
+                <td className="td w-12 whitespace-nowrap pr-0">
+                  {!congelado && <AccionesLinea arrastre={arrastre} id={l.id} onQuitar={() => quitar(l.id)} />}
                 </td>
                 <td className="td">
                   <input className="input min-w-44" list={listaId} value={l.concepto} aria-label="Concepto" placeholder="Elegí o escribí" onChange={(e) => cambiarConcepto(l, e.target.value)} />

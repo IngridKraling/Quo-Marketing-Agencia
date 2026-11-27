@@ -32,9 +32,10 @@ import { conceptosParaArea, opcionesMarca as marcasDelCliente, proveedoresParaRu
 import { decimal, pesos, porcentaje } from "@/lib/formato";
 import { CampoNumero } from "@/components/campo-numero";
 import { CampoPesos } from "@/components/campo-pesos";
-import { aLinea, lineaDesdeConcepto, usaHoras } from "@/lib/lineas";
+import { aLinea, agruparPorRubro, arrastrarLinea, arrastrarRubro, lineaDesdeConcepto, ordenDeRubros, usaHoras } from "@/lib/lineas";
 import { comparar, type Comparacion, type Referencia } from "@/lib/medidas";
 import { TablaMedidas, medidaDe } from "@/components/lineas-medida";
+import { AccionesLinea, useArrastre, type Arrastre } from "@/components/flechas-linea";
 
 const ORIGENES: { valor: Origen; etiqueta: string }[] = [
   { valor: "proveedor", etiqueta: "Proveedor" },
@@ -188,10 +189,18 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo, refer
     });
   }
 
-  const resumen = resumenPresupuesto(p.lineas.map(aLinea), cat.rubros, params);
-
-  // Secciones: rubros del catálogo que tienen líneas, en su orden; al final, las líneas sin rubro.
-  const rubrosConLineas = cat.rubros.filter((r) => p.lineas.some((l) => l.rubro_id === r.id));
+  // Secciones: rubros en el orden del presupuesto (se cambia con las flechas); al final, las líneas sin rubro.
+  const rubroPorId = new Map(cat.rubros.map((r) => [r.id, r]));
+  const rubrosConLineas = ordenDeRubros(p.lineas)
+    .map((id) => (id ? rubroPorId.get(id) : undefined))
+    .filter((r): r is (typeof cat.rubros)[number] => !!r);
+  // El resumen por rubro respeta ese mismo orden.
+  const rubrosOrdenados = [...rubrosConLineas, ...cat.rubros.filter((r) => !rubrosConLineas.includes(r))];
+  const resumen = resumenPresupuesto(p.lineas.map(aLinea), rubrosOrdenados, params);
+  // Arrastrar y soltar rubros (con sus líneas) y líneas dentro de su rubro.
+  const arrastre = useArrastre((tipo, id, destino) =>
+    setP((prev) => ({ ...prev, lineas: tipo === "rubro" ? arrastrarRubro(prev.lineas, id, destino) : arrastrarLinea(prev.lineas, id, destino) })),
+  );
   const sinRubro = p.lineas.filter((l) => !l.rubro_id || !cat.rubros.some((r) => r.id === l.rubro_id));
   const rubrosLibres = rubrosParaArea(cat.rubros, p.area_id).filter((r) => !p.lineas.some((l) => l.rubro_id === r.id));
 
@@ -206,10 +215,8 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo, refer
     });
   }
 
-  function ordenarLineas() {
-    const orden = new Map(cat.rubros.map((r, i) => [r.id, i]));
-    return [...p.lineas].sort((a, b) => (orden.get(a.rubro_id ?? "") ?? 999) - (orden.get(b.rubro_id ?? "") ?? 999));
-  }
+  // Se guarda en el orden en que se ve (rubros y líneas como se acomodaron con las flechas).
+  const ordenarLineas = () => agruparPorRubro(p.lineas);
 
   const guardar = () =>
     ejecutar(
@@ -288,6 +295,7 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo, refer
             <SeccionRubro
               key={r.id}
               titulo={r.nombre}
+              arrastre={congelado ? undefined : arrastre}
               rubroId={r.id}
               lineas={p.lineas.filter((l) => l.rubro_id === r.id)}
               porMedida={!!r.porMedida}
@@ -444,8 +452,11 @@ function SeccionRubro({
   porMedida = false,
   comparar: compararLinea,
   areaId,
+  arrastre,
 }: {
   areaId: string | null;
+  /** Arrastrar el rubro y sus líneas (no está en "Sin rubro" ni en una versión aprobada). */
+  arrastre?: Arrastre;
   titulo: string;
   rubroId: string | null;
   lineas: LineaInput[];
@@ -468,11 +479,21 @@ function SeccionRubro({
   const calc = lineas.map((l) => calcularLinea(aLinea(l), params));
   const costo = calc.reduce((s, r) => s + r.costo, 0);
   const venta = calc.reduce((s, r) => s + r.venta, 0);
+  const rubroDnd = arrastre && rubroId ? arrastre.elemento("rubro", rubroId, "rubros") : null;
+  /** Props de arrastre de una fila (solo dentro del mismo rubro). */
+  const filaDnd = (id: string) => {
+    if (!arrastre) return { className: "" };
+    const { estado, ...resto } = arrastre.elemento("linea", id, rubroId ?? "sin-rubro");
+    return { ...resto, className: estado };
+  };
 
   return (
-    <section className="card space-y-3">
+    <section className={`card space-y-3 ${rubroDnd?.estado ?? ""}`} {...(rubroDnd ? { draggable: rubroDnd.draggable, onDragStart: rubroDnd.onDragStart, onDragOver: rubroDnd.onDragOver, onDrop: rubroDnd.onDrop, onDragEnd: rubroDnd.onDragEnd } : {})}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="font-medium">{titulo}</h2>
+        <h2 className="flex items-center gap-2 font-medium">
+          {arrastre && rubroId && arrastre.manija("rubro", rubroId, `Arrastrá para mover el rubro ${titulo}`)}
+          {titulo}
+        </h2>
         <span className="text-sm text-zinc-500">
           Costo <b className="tabular-nums text-zinc-900">{pesos(costo)}</b> · Venta <b className="tabular-nums text-zinc-900">{pesos(venta)}</b>
         </span>
@@ -492,6 +513,8 @@ function SeccionRubro({
               congelado={congelado}
               listaId={listaId}
               proveedores={provs}
+              filaDnd={filaDnd}
+              arrastre={arrastre}
               {...{ setLinea, quitar, cambiarConcepto }}
             />
           ) : (
@@ -517,10 +540,11 @@ function SeccionRubro({
             <tbody>
               {lineas.map((l, i) => {
                 const r = calc[i];
+                const { className: dndClase, ...dnd } = filaDnd(l.id);
                 return (
-                  <tr key={l.id} className={l.cantidad === 0 ? "bg-red-50/60" : ""}>
-                    <td className="td w-6 pr-0">
-                      {!congelado && <button type="button" className="text-zinc-400 hover:text-red-600" onClick={() => quitar(l.id)} aria-label="Quitar línea" title="Quitar línea">✕</button>}
+                  <tr key={l.id} {...dnd} className={`${l.cantidad === 0 ? "bg-red-50/60" : ""} ${dndClase}`}>
+                    <td className="td w-12 whitespace-nowrap pr-0">
+                      {!congelado && <AccionesLinea arrastre={arrastre} id={l.id} onQuitar={() => quitar(l.id)} />}
                     </td>
                     <td className="td">
                       <input className="input min-w-44" list={listaId} value={l.concepto} aria-label="Concepto" placeholder="Elegí o escribí" onChange={(e) => cambiarConcepto(l, e.target.value)} />
