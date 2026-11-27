@@ -59,7 +59,7 @@ export const COLOR_ESTADO: Record<Estado, string> = {
   aprobado: "bg-green-100 text-green-800 border-green-300",
   en_ejecucion: "bg-blue-100 text-blue-800 border-blue-300",
   finalizado: "bg-indigo-100 text-indigo-800 border-indigo-300",
-  facturado: "bg-green-600 text-white border-green-600",
+  facturado: "bg-green-100 text-green-800 border-green-300",
   rechazado: "bg-red-100 text-red-800 border-red-300",
   cancelado: "bg-red-100 text-red-800 border-red-300",
 };
@@ -69,7 +69,7 @@ export const COLOR_EJECUCION: Record<(typeof ETAPAS_EJECUCION)[number], string> 
   aprobado: "bg-white text-zinc-700 border-zinc-300",
   en_ejecucion: "bg-blue-100 text-blue-800 border-blue-300",
   finalizado: "bg-indigo-100 text-indigo-800 border-indigo-300",
-  facturado: "bg-green-600 text-white border-green-600",
+  facturado: "bg-green-100 text-green-800 border-green-300",
 };
 
 export type Parametros = {
