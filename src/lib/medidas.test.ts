@@ -48,7 +48,7 @@ describe("comparar", () => {
     expect(comparar(saliente, [ref({ estado: "rechazado" })], "actual", HOY).anterior?.markup).toBe(1.55);
   });
 
-  it("última del mismo proveedor y promedio de todos en los últimos 6 meses", () => {
+  it("última del mismo proveedor y el más barato de otro proveedor en los últimos 6 meses", () => {
     const refs = [
       ref({ presupuestoId: "a", fecha: "2026-09-01", cotizacionTotal: 180000 }), // 250.000/m²
       ref({ presupuestoId: "b", fecha: "2026-11-01", cotizacionTotal: 216000 }), // 300.000/m²  ← última de Publisite
@@ -58,7 +58,8 @@ describe("comparar", () => {
     ];
     const c = comparar(saliente, refs, "actual", HOY);
     expect(c.ultimaDelProveedor).toMatchObject({ presupuestoId: "b", valor: 300000, difPct: -7.41 });
-    expect(c.promedio).toMatchObject({ valor: 250000, cantidad: 3, difPct: 11.11 });
+    // Otro: 200.000/m² (c); el de enero (d) es más barato pero tiene más de 6 meses.
+    expect(c.otroMasBarato).toMatchObject({ proveedor: "Otro", presupuestoId: "c", valor: 200000, difPct: 38.89 });
   });
 
   it("compara por nombre si la línea no viene del catálogo, sin importar mayúsculas ni acentos", () => {

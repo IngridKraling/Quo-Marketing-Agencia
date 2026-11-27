@@ -81,7 +81,9 @@ export type PresupuestoInput = z.infer<typeof presupuestoSchema>;
 export async function guardarPresupuesto(input: PresupuestoInput): Promise<{ ok: boolean; mensaje: string; id?: string }> {
   const parsed = presupuestoSchema.safeParse(input);
   if (!parsed.success) return error(parsed.error.issues[0]?.message ?? "Datos inválidos");
-  const { id, lineas, ...cabecera } = parsed.data;
+  const { id, lineas: lineasRecibidas, ...cabecera } = parsed.data;
+  // Un presupuesto nuevo nunca reutiliza ids de línea: si no, el upsert movería líneas de otro presupuesto.
+  const lineas = id ? lineasRecibidas : lineasRecibidas.map((l) => ({ ...l, id: crypto.randomUUID() }));
   const supabase = await db();
 
   let presupuestoId = id;
@@ -99,6 +101,10 @@ export async function guardarPresupuesto(input: PresupuestoInput): Promise<{ ok:
 
   // Las líneas presupuestadas se reemplazan; los gastos no presupuestados no se tocan desde acá.
   const ids = lineas.map((l) => l.id);
+  if (id && ids.length) {
+    const { data: ajenas } = await supabase.from("presupuesto_lineas").select("id").in("id", ids).neq("presupuesto_id", id).limit(1);
+    if (ajenas?.length) return error("Hay líneas que pertenecen a otro presupuesto. Recargá la página y volvé a intentar.");
+  }
   let borrar = supabase.from("presupuesto_lineas").delete().eq("presupuesto_id", presupuestoId).eq("presupuestada", true);
   if (ids.length) borrar = borrar.not("id", "in", `(${ids.join(",")})`);
   const del = await borrar;
@@ -323,7 +329,15 @@ export async function guardarConcepto(_: Resultado, form: FormData): Promise<Res
   if (!parsed.success) return error("Revisá rubro, nombre y números");
   const { id, ...fila } = parsed.data;
   if (fila.markup != null && fila.markup <= 0) return error("El markup es un multiplicador (ej. 1.4)");
-  return guardarFila("conceptos", id, { ...fila, por_defecto: form.get("por_defecto") != null, activo: activoDe(form) }, "/conceptos", "Concepto guardado");
+  const ocultas = z.array(z.string().uuid()).safeParse(form.getAll("areas_ocultas"));
+  if (!ocultas.success) return error("Revisá las áreas donde se oculta");
+  return guardarFila(
+    "conceptos",
+    id,
+    { ...fila, por_defecto: form.get("por_defecto") != null, areas_ocultas: ocultas.data, activo: activoDe(form) },
+    "/conceptos",
+    "Concepto guardado",
+  );
 }
 
 export async function guardarRubro(_: Resultado, form: FormData): Promise<Resultado> {
@@ -350,8 +364,31 @@ export async function guardarRubro(_: Resultado, form: FormData): Promise<Result
 export async function guardarProveedor(_: Resultado, form: FormData): Promise<Resultado> {
   const parsed = z.object({ id: z.string().uuid().optional(), nombre: z.string().trim().min(1) }).safeParse(Object.fromEntries(form));
   if (!parsed.success) return error("Completá el nombre");
-  const { id, ...fila } = parsed.data;
-  return guardarFila("proveedores", id, { ...fila, activo: activoDe(form) }, "/configuracion", "Proveedor guardado");
+  const rubros = z.array(z.string().uuid()).safeParse(form.getAll("rubros"));
+  if (!rubros.success) return error("Revisá los rubros");
+  const { id, ...datos } = parsed.data;
+  const fila = { ...datos, activo: activoDe(form) };
+  const supabase = await db();
+
+  let proveedorId = id;
+  if (id) {
+    const { error: e } = await supabase.from("proveedores").update(fila).eq("id", id);
+    if (e) return error(e.code === "23505" ? "Ya existe un proveedor con ese nombre" : e.message);
+  } else {
+    const { data, error: e } = await supabase.from("proveedores").insert(fila).select("id").single();
+    if (e) return error(e.code === "23505" ? "Ya existe un proveedor con ese nombre" : e.message);
+    proveedorId = data.id as string;
+  }
+
+  // Rubros en los que trabaja: se reemplazan por los tildados.
+  const del = await supabase.from("proveedor_rubros").delete().eq("proveedor_id", proveedorId);
+  if (del.error) return error(del.error.message);
+  if (rubros.data.length) {
+    const ins = await supabase.from("proveedor_rubros").insert(rubros.data.map((rubro_id) => ({ proveedor_id: proveedorId, rubro_id })));
+    if (ins.error) return error(ins.error.message);
+  }
+  revalidatePath("/configuracion");
+  return { ok: true, mensaje: "Proveedor guardado" };
 }
 
 export async function guardarResponsable(_: Resultado, form: FormData): Promise<Resultado> {
