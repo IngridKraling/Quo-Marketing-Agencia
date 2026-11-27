@@ -35,6 +35,8 @@ export type FilaPresupuesto = {
   venta: number;
   margenPct: number | null;
   costoReal: number | null;
+  /** Según Facturación: null si no está aprobado. */
+  facturacion: "pendiente" | "parcial" | "facturado" | null;
 };
 
 
@@ -268,9 +270,17 @@ export function TablaPresupuestos({ filas }: { filas: FilaPresupuesto[] }) {
                           >
                             {ETAPAS_EJECUCION.map((e) => <option key={e} value={e} className="bg-white text-zinc-900">{ETIQUETA_EJECUCION[e]}</option>)}
                           </select>
-                        ) : (
-                          <span className="text-xs text-zinc-400" title="Se completa cuando el presupuesto está aprobado">—</span>
+                        ) : null}
+                        {p.facturacion && p.facturacion !== "facturado" && (
+                          <Link
+                            href="/facturacion"
+                            onClick={(e) => e.stopPropagation()}
+                            className="mt-1 block w-fit rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800 hover:underline"
+                          >
+                            {p.facturacion === "parcial" ? "Facturado en parte" : "Pendiente de facturar"}
+                          </Link>
                         )}
+                        {!aprobado && <span className="text-xs text-zinc-400" title="Se completa cuando el presupuesto está aprobado">—</span>}
                       </td>
                     </>
                   );

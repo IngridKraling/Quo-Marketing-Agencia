@@ -7,6 +7,7 @@ import { useEffect, useState, type ReactNode } from "react";
 
 const ICONOS: Record<string, ReactNode> = {
   presupuestos: <path d="M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6" />,
+  facturacion: <path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3" />,
   conceptos: <path d="M4 6h16M4 12h16M4 18h10" />,
   clientes: <path d="M16 19v-1a4 4 0 0 0-8 0v1M12 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6M19 19v-1a3 3 0 0 0-2-2.8M17 5.2a3 3 0 0 1 0 5.6" />,
   configuracion: <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.7a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.5a7 7 0 0 0 0 2.4l-2 1.5 2 3.4 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.7a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.5c.1-.4.1-.8.1-1.2" />,
@@ -21,6 +22,7 @@ const Icono = ({ nombre }: { nombre: string }) => (
 
 const LINKS = [
   { href: "/presupuestos", label: "Presupuestos", icono: "presupuestos" },
+  { href: "/facturacion", label: "Facturación", icono: "facturacion" },
   { href: "/conceptos", label: "Conceptos", icono: "conceptos" },
   { href: "/clientes", label: "Clientes", icono: "clientes" },
   { href: "/configuracion", label: "Configuración", icono: "configuracion" },

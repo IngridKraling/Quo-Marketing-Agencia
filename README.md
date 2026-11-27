@@ -30,6 +30,10 @@ Stack: Next.js 16 (App Router) en Vercel · Supabase (Postgres + Auth) · TypeSc
 - **Costos reales**: por línea, “igual a presupuesto”, cambios puntuales (lo vacío toma lo presupuestado) o monto de la factura.
   Estados: Pendiente / OK / Excedido / Ahorro / No presupuestado. Al final, el desvío total ($ y %) entre presupuestado y real. Gastos no presupuestados. Control por rubro y resultado del
   proyecto contra lo facturado.
+- **Facturación**: cada presupuesto aprobado aparece solo con área, detalle e importe neto; se cargan período, OC N°,
+  FC N°, FC enviada, estado de pago y comentarios. Con FC N° queda “Facturado” (y la Ejecución del presupuesto pasa
+  a Facturado cuando todas sus partes lo están). Si el cliente manda la OC en partes, se divide. Arma el texto de lo
+  pendiente de un cliente para pedir la OC.
 - **Vista cliente**: rubros y conceptos con precio de venta, subtotal, IVA y total; imprimible / PDF. Sin costos ni observaciones.
 - **Configuración**: markup general, margen mínimo, IVA, impuestos s/venta, rubros, áreas y proveedores.
 
