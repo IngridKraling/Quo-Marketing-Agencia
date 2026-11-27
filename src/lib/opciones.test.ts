@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alfabetico, opcionesMarca, rubrosParaArea } from "./opciones";
+import { alfabetico, conceptosParaArea, opcionesMarca, rubrosParaArea } from "./opciones";
 
 describe("desplegables", () => {
   it("ordena A → Z con OTROS al final", () => {
@@ -38,5 +38,14 @@ describe("rubrosParaArea", () => {
   it("un área sin rubros propios, o sin área elegida, ve todo", () => {
     expect(rubrosParaArea(rubros, "proyectos-especiales")).toHaveLength(4);
     expect(rubrosParaArea(rubros, null)).toHaveLength(4);
+  });
+});
+
+describe("conceptosParaArea", () => {
+  const conceptos = [{ n: "Supervisor", areas_ocultas: [] }, { n: "Promotoras", areas_ocultas: ["trade"] }, { n: "Flete" }];
+  it("saca los conceptos ocultos en el área", () => {
+    expect(conceptosParaArea(conceptos, "trade").map((c) => c.n)).toEqual(["Supervisor", "Flete"]);
+    expect(conceptosParaArea(conceptos, "btl")).toHaveLength(3);
+    expect(conceptosParaArea(conceptos, null)).toHaveLength(3);
   });
 });

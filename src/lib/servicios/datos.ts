@@ -17,6 +17,8 @@ export type Concepto = {
   cantidad_def: number | null;
   horas_def: number | null;
   dias_def: number | null;
+  /** Áreas en las que este concepto no se ofrece (ej. Promotoras en Trade). */
+  areas_ocultas: string[];
 };
 export type Opcion = { id: string; nombre: string };
 export type Catalogo = {
@@ -123,6 +125,7 @@ export async function catalogo(): Promise<Catalogo> {
       cantidad_def: numONull(c.cantidad_def),
       horas_def: numONull(c.horas_def),
       dias_def: numONull(c.dias_def),
+      areas_ocultas: (c.areas_ocultas as string[] | null) ?? [],
     })),
     proveedores: (proveedores.data ?? []).map((p) => p.nombre),
     areas: (areas.data ?? []).map((a) => ({ id: a.id, nombre: a.nombre, cargaPorDefecto: a.carga_por_defecto !== false })),

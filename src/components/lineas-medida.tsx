@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment } from "react";
+import { Fragment, type ReactNode } from "react";
 import type { LineaInput } from "@/app/actions";
 import { CampoNumero } from "@/components/campo-numero";
 import { CampoPesos } from "@/components/campo-pesos";
@@ -20,15 +20,112 @@ export const medidaDe = (l: LineaInput) => ({
   cotizacionTotal: l.cotizacion_total ?? null,
 });
 
-/** Diferencia en %: verde si está por debajo, ámbar si supera 10 %. */
+/** "11 % más caro" / "5 % más barato" / "igual", con color. */
 function Diferencia({ pct }: { pct: number }) {
-  const color = pct < 0 ? "text-emerald-700" : pct > 10 ? "text-amber-700" : "text-zinc-500";
-  return <span className={`text-xs ${color}`}>{pct > 0 ? "+" : ""}{decimal(Math.round(pct))} %</span>;
+  const n = Math.round(pct);
+  if (n === 0) return <b className="text-zinc-700">igual</b>;
+  return n > 0 ? (
+    <b className={n > 10 ? "text-amber-700" : "text-zinc-700"}>{decimal(n)} % más caro</b>
+  ) : (
+    <b className="text-emerald-700">{decimal(-n)} % más barato</b>
+  );
+}
+
+const LinkPpto = ({ id, codigo }: { id: string; codigo: string | null }) => (
+  <Link className="font-semibold underline" href={`/presupuestos/${id}`} target="_blank">{codigo ?? "otro presupuesto"}</Link>
+);
+
+/** Frases de comparación debajo de una línea: costo vs. otras cotizaciones y qué pasa con el precio al cliente. */
+function Comparaciones({ l, c, markup, params }: { l: LineaInput; c: Comparacion; markup: number; params: Parametros }) {
+  const frases: { tono: "info" | "ok" | "alerta"; texto: ReactNode }[] = [];
+  const unidad = c.unitario?.por === "pieza" ? "por pieza" : "por m²";
+
+  // 1) Costo: ¿cuánto cobró este proveedor la última vez? ¿y el promedio de todos?
+  if (c.ultimaDelProveedor) {
+    const u = c.ultimaDelProveedor;
+    frases.push({
+      tono: "info",
+      texto: (
+        <>
+          <b>{l.proveedor}</b> la última vez cobró <b>{pesos(u.valor)} {unidad}</b> ({fecha(u.fecha)}, <LinkPpto id={u.presupuestoId} codigo={u.codigo} />)
+          {" → "}hoy está <Diferencia pct={u.difPct} />.
+        </>
+      ),
+    });
+  } else if (c.unitario && l.proveedor) {
+    frases.push({ tono: "info", texto: <>Es la primera vez que <b>{l.proveedor}</b> cotiza este concepto: no hay con qué comparar.</> });
+  }
+  // El promedio solo suma si incluye otras cotizaciones además de la última de este proveedor.
+  const promedioRepetido = c.promedio && c.ultimaDelProveedor && c.promedio.cantidad === 1 && c.promedio.valor === c.ultimaDelProveedor.valor;
+  if (c.promedio && !promedioRepetido) {
+    frases.push({
+      tono: "info",
+      texto: (
+        <>
+          Promedio de <b>todos los proveedores</b> en los últimos 6 meses: <b>{pesos(c.promedio.valor)} {unidad}</b> ({c.promedio.cantidad}{" "}
+          {c.promedio.cantidad === 1 ? "cotización" : "cotizaciones"}) → hoy está <Diferencia pct={c.promedio.difPct} />.
+        </>
+      ),
+    });
+  }
+
+  // 2) Precio al cliente: ¿mantiene el markup del último presupuesto enviado con este mismo ítem?
+  const a = c.anterior;
+  if (a) {
+    const ppto = <><LinkPpto id={a.presupuestoId} codigo={a.codigo} /> ({fecha(a.fecha)})</>;
+    if (a.mismoCosto && markup === a.markup) {
+      const enVezDelTramo = params.markupTramo != null && params.markupTramo !== a.markup;
+      frases.push({
+        tono: "ok",
+        texto: (
+          <>
+            ✓ Mismo ítem, proveedor, medidas y costo que en {ppto}: se usa el mismo markup <b>× {decimal(a.markup)}</b>
+            {enVezDelTramo && <> (en vez del × {decimal(params.markupTramo!)} del tramo)</>}, así que <b>el cliente ve el mismo precio</b>.
+          </>
+        ),
+      });
+    } else if (a.mismoCosto) {
+      frases.push({
+        tono: "alerta",
+        texto: (
+          <>
+            Ojo: en {ppto} este mismo ítem, con el mismo costo, se cotizó con <b>× {decimal(a.markup)}</b>. Acá queda con <b>× {decimal(markup)}</b>,
+            así que <b>el cliente va a ver otro precio</b>.
+          </>
+        ),
+      });
+    } else {
+      const actual = l.cotizacion_total == null ? null : l.cotizacion_total / (l.cantidad && l.cantidad > 0 ? l.cantidad : 1);
+      frases.push({
+        tono: "info",
+        texto: (
+          <>
+            En {ppto} este ítem costaba <b>{pesos(a.costoPieza)} por pieza</b>
+            {actual != null && <> y ahora cuesta <b>{pesos(actual)}</b></>}. Como cambió el costo, se usa el markup normal.
+          </>
+        ),
+      });
+    }
+  }
+
+  if (!frases.length) return null;
+  const color = { info: "bg-zinc-100 text-zinc-700", ok: "bg-emerald-50 text-emerald-900", alerta: "bg-amber-50 text-amber-900" };
+  return (
+    <tr>
+      <td colSpan={13} className="px-2 pb-3 pt-0">
+        <ul className="sticky left-0 flex w-fit max-w-[min(100%,900px)] flex-col gap-1 text-xs">
+          {frases.map((f, i) => (
+            <li key={i} className={`rounded px-2 py-1 ${color[f.tono]}`}>{f.texto}</li>
+          ))}
+        </ul>
+      </td>
+    </tr>
+  );
 }
 
 /**
  * Tabla de un rubro que se cotiza por medida (Trade): base × altura, piezas y cotización total del proveedor.
- * Calcula m² y $/m² (o $/pieza) y lo compara con la última cotización del mismo proveedor y con el promedio.
+ * Calcula m² y $/m² (o $/pieza) y debajo de cada línea explica en palabras cómo se compara con otras cotizaciones.
  */
 export function TablaMedidas({
   lineas,
@@ -54,7 +151,7 @@ export function TablaMedidas({
   cambiarConcepto: (l: LineaInput, texto: string) => void;
 }) {
   return (
-    <table className="w-full min-w-[1500px]">
+    <table className="w-full min-w-[1250px]">
       <thead>
         <tr>
           <th className="th">Concepto</th>
@@ -65,9 +162,7 @@ export function TablaMedidas({
           <th className="th w-16">Piezas</th>
           <th className="th w-16 text-right">m²</th>
           <th className="th w-32">Cotización total</th>
-          <th className="th w-28 text-right">$ / m²</th>
-          <th className="th w-32 text-right">Mismo proveedor</th>
-          <th className="th w-32 text-right">Todos (6 meses)</th>
+          <th className="th w-28 text-right">Costo por m²</th>
           <th className="th w-20">Markup</th>
           <th className="th w-28 text-right">Venta</th>
           <th className="th w-16 text-right">Margen</th>
@@ -80,7 +175,7 @@ export function TablaMedidas({
           const c = comparaciones[i];
           const m2 = metros2(medidaDe(l));
           const opcionesProveedor = l.proveedor && !proveedores.includes(l.proveedor) ? [l.proveedor, ...proveedores] : proveedores;
-          const heredado = !!l.markup_ref_presupuesto_id && c.anterior?.presupuestoId === l.markup_ref_presupuesto_id;
+          const mantieneAnterior = !!c.anterior?.mismoCosto && r.markup === c.anterior.markup;
           return (
             <Fragment key={l.id}>
               <tr className={!l.proveedor ? "bg-amber-50/60" : ""}>
@@ -99,71 +194,25 @@ export function TablaMedidas({
                 <td className="td"><CampoNumero valor={l.cantidad} etiqueta="Piezas" className="input min-w-14" onCambio={(v) => setLinea(l.id, { cantidad: v })} /></td>
                 <td className="td text-right tabular-nums">{m2 ? decimal(m2) : "—"}</td>
                 <td className="td"><CampoPesos valor={l.cotizacion_total ?? null} etiqueta="Cotización total" placeholder="A cotizar" className="input min-w-32" onCambio={(v) => setLinea(l.id, { cotizacion_total: v })} /></td>
-                <td className="td text-right font-semibold tabular-nums">
-                  {c.unitario ? <>{pesos(c.unitario.valor)}{c.unitario.por === "pieza" && <span className="block text-xs font-normal text-zinc-500">por pieza</span>}</> : "—"}
-                </td>
-                <td className="td text-right tabular-nums">
-                  {c.ultimaDelProveedor ? (
-                    <>
-                      {pesos(c.ultimaDelProveedor.valor)}
-                      <span className="block whitespace-nowrap text-xs text-zinc-500">
-                        {fecha(c.ultimaDelProveedor.fecha)} <Diferencia pct={c.ultimaDelProveedor.difPct} />
-                      </span>
-                    </>
-                  ) : (
-                    <span className="text-xs text-zinc-400">{c.unitario && l.proveedor ? "primera vez" : "—"}</span>
-                  )}
-                </td>
-                <td className="td text-right tabular-nums">
-                  {c.promedio ? (
-                    <>
-                      {pesos(c.promedio.valor)}
-                      <span className="block whitespace-nowrap text-xs text-zinc-500">
-                        {c.promedio.cantidad} pptos <Diferencia pct={c.promedio.difPct} />
-                      </span>
-                    </>
-                  ) : (
-                    <span className="text-xs text-zinc-400">{c.unitario ? "sin datos" : "—"}</span>
-                  )}
+                <td className="td whitespace-nowrap text-right font-semibold tabular-nums">
+                  {c.unitario ? <>{pesos(c.unitario.valor)}{c.unitario.por === "pieza" && <span className="block text-xs font-normal text-zinc-500">por pieza (sin medidas)</span>}</> : "—"}
                 </td>
                 <td className="td">
                   <CampoNumero
                     valor={l.markup}
                     etiqueta="Markup (override)"
-                    className={`input min-w-16 ${heredado ? "border-indigo-400 bg-indigo-50" : ""}`}
+                    className={`input min-w-16 ${mantieneAnterior && l.markup != null ? "border-emerald-500 bg-emerald-50" : ""}`}
                     placeholder={decimal(params.markupTramo ?? l.markup_concepto ?? params.markupDefault)}
                     onCambio={(v) => setLinea(l.id, { markup: v })}
                   />
                 </td>
-                <td className="td text-right tabular-nums">{pesos(r.venta)}</td>
+                <td className="td whitespace-nowrap text-right tabular-nums">{pesos(r.venta)}</td>
                 <td className={`td whitespace-nowrap text-right tabular-nums ${r.venta > 0 && r.margenPct < params.margenMinimoPct ? "text-red-700" : ""}`}>{r.venta ? porcentaje(r.margenPct) : "—"}</td>
                 <td className="td">
                   {!congelado && <button type="button" className="text-zinc-400 hover:text-red-600" onClick={() => quitar(l.id)} aria-label="Quitar línea">✕</button>}
                 </td>
               </tr>
-              {c.anterior && (
-                <tr>
-                  <td colSpan={15} className="px-2 pb-2 pt-0 text-xs">
-                    <span className={`sticky left-0 inline-block rounded px-2 py-1 ${c.anterior.mismoCosto ? "bg-indigo-50 text-indigo-900" : "bg-zinc-100 text-zinc-700"}`}>
-                      {c.anterior.mismoCosto ? (
-                        <>
-                          ↺ Mismo costo que en{" "}
-                          <Link className="font-semibold underline" href={`/presupuestos/${c.anterior.presupuestoId}`} target="_blank">{c.anterior.codigo}</Link>
-                          {" "}({fecha(c.anterior.fecha)}): {heredado ? "se mantiene" : "allí fue"} × {decimal(c.anterior.markup)}
-                          {heredado && params.markupTramo != null && params.markupTramo !== c.anterior.markup && <> en vez del × {decimal(params.markupTramo)} del tramo</>}
-                          {!heredado && " (este presupuesto usa otro markup cargado a mano)"}.
-                        </>
-                      ) : (
-                        <>
-                          La última vez (
-                          <Link className="font-semibold underline" href={`/presupuestos/${c.anterior.presupuestoId}`} target="_blank">{c.anterior.codigo}</Link>
-                          , {fecha(c.anterior.fecha)}) costaba {pesos(c.anterior.costoPieza)} por pieza con × {decimal(c.anterior.markup)}. Ahora cambió el costo, así que se usa el markup normal.
-                        </>
-                      )}
-                    </span>
-                  </td>
-                </tr>
-              )}
+              <Comparaciones l={l} c={c} markup={r.markup} params={params} />
             </Fragment>
           );
         })}

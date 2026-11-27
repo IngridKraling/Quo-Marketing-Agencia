@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { EditorPresupuesto } from "@/components/editor-presupuesto";
+import { ReiniciarAlEntrar } from "@/components/reiniciar-al-entrar";
 import { createClient } from "@/lib/supabase/server";
 import { numONull } from "@/lib/presupuesto-calc";
 import { catalogo, referenciasMedidas } from "@/lib/servicios/datos";
@@ -39,6 +40,8 @@ async function Detalle({ params }: { params: Promise<{ id: string }> }) {
         )}
       </div>
 
+      {/* Cada vez que se abre, muestra lo guardado (no cambios sin guardar de una visita anterior). */}
+      <ReiniciarAlEntrar>
       <EditorPresupuesto
         key={`${p.updated_at}-${p.estado}-${p.version}`}
         cat={cat}
@@ -79,6 +82,7 @@ async function Detalle({ params }: { params: Promise<{ id: string }> }) {
           })),
         }}
       />
+      </ReiniciarAlEntrar>
 
       {!!versiones?.length && (
         <section className="card overflow-x-auto">

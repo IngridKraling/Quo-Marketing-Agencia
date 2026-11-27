@@ -23,3 +23,7 @@ export function rubrosParaArea<R extends { areaId?: string | null }>(rubros: R[]
   if (!areaId || !rubros.some((r) => r.areaId === areaId)) return rubros;
   return rubros.filter((r) => !r.areaId || r.areaId === areaId);
 }
+
+/** Conceptos que se ofrecen en un área: los que no la tienen entre sus áreas ocultas. */
+export const conceptosParaArea = <C extends { areas_ocultas?: string[] }>(conceptos: C[], areaId: string | null): C[] =>
+  areaId ? conceptos.filter((c) => !c.areas_ocultas?.includes(areaId)) : conceptos;

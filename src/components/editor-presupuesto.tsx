@@ -23,7 +23,7 @@ import {
   type Origen,
 } from "@/lib/presupuesto-calc";
 import type { Catalogo } from "@/lib/servicios/datos";
-import { opcionesMarca as marcasDelCliente, rubrosParaArea } from "@/lib/opciones";
+import { conceptosParaArea, opcionesMarca as marcasDelCliente, rubrosParaArea } from "@/lib/opciones";
 import { decimal, pesos, porcentaje } from "@/lib/formato";
 import { CampoNumero } from "@/components/campo-numero";
 import { CampoPesos } from "@/components/campo-pesos";
@@ -59,6 +59,29 @@ const lineaVacia = (rubroId: string | null): LineaInput => ({
   markup_ref_presupuesto_id: null,
 });
 
+/**
+ * Líneas por medida: si hay un presupuesto enviado con el mismo concepto, proveedor, medidas y costo,
+ * se mantiene su markup (para no cambiarle el precio al cliente). Si después cambia algo, se vuelve al
+ * markup normal. Un markup escrito a mano nunca se pisa.
+ */
+function aplicarMarkupAnterior(
+  l: LineaInput,
+  cambios: Partial<LineaInput>,
+  presupuestoId: string | null,
+  porMedida: Set<string>,
+  referencias: Referencia[],
+  hoy: string,
+): LineaInput {
+  const next = { ...l, ...cambios };
+  if (!next.rubro_id || !porMedida.has(next.rubro_id)) return next;
+  if ("markup" in cambios) return { ...next, markup_ref_presupuesto_id: null };
+  const anterior = comparar(medidaDe(next), referencias, presupuestoId, hoy).anterior;
+  const automatico = next.markup == null || !!next.markup_ref_presupuesto_id;
+  if (anterior?.mismoCosto && automatico) return { ...next, markup: anterior.markup, markup_ref_presupuesto_id: anterior.presupuestoId };
+  if (next.markup_ref_presupuesto_id) return { ...next, markup: null, markup_ref_presupuesto_id: null };
+  return next;
+}
+
 type Props = {
   cat: Catalogo;
   inicial: PresupuestoInput;
@@ -71,7 +94,16 @@ type Props = {
 };
 
 export function EditorPresupuesto({ cat, inicial, estado, version, codigo, referencias, hoy }: Props) {
-  const [p, setP] = useState(inicial);
+  // Un presupuesto nuevo siempre arranca con ids de línea nuevos: si se reutilizaran (por ejemplo, porque la
+  // página quedó en memoria), al guardar se moverían las líneas de otro presupuesto con esos mismos ids.
+  // Además, en las líneas por medida se aplica desde el arranque la regla de "mismo costo → mismo markup".
+  const [arranque] = useState<PresupuestoInput>(() => {
+    const lineas = inicial.id ? inicial.lineas : inicial.lineas.map((l) => ({ ...l, id: crypto.randomUUID() }));
+    if (estaCongelado(estado)) return { ...inicial, lineas };
+    const medida = new Set(cat.rubros.filter((r) => r.porMedida).map((r) => r.id));
+    return { ...inicial, lineas: lineas.map((l) => aplicarMarkupAnterior(l, {}, inicial.id ?? null, medida, referencias, hoy)) };
+  });
+  const [p, setP] = useState(arranque);
   const [mensaje, setMensaje] = useState<{ ok: boolean; texto: string } | null>(null);
   const [pendiente, startTransition] = useTransition();
   const router = useRouter();
@@ -85,21 +117,8 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo, refer
   const set = <K extends keyof PresupuestoInput>(k: K, v: PresupuestoInput[K]) => setP((prev) => ({ ...prev, [k]: v }));
   const porMedida = useMemo(() => new Set(cat.rubros.filter((r) => r.porMedida).map((r) => r.id)), [cat.rubros]);
 
-  /**
-   * Líneas por medida: si hay un presupuesto enviado con el mismo concepto, proveedor, medidas y costo,
-   * se mantiene su markup (para no cambiarle el precio al cliente). Si después cambia algo, se vuelve al
-   * markup normal. Un markup escrito a mano nunca se pisa.
-   */
-  function conMarkupAnterior(l: LineaInput, cambios: Partial<LineaInput>, presupuestoId: string | null): LineaInput {
-    const next = { ...l, ...cambios };
-    if (!next.rubro_id || !porMedida.has(next.rubro_id)) return next;
-    if ("markup" in cambios) return { ...next, markup_ref_presupuesto_id: null };
-    const anterior = comparar(medidaDe(next), referencias, presupuestoId, hoy).anterior;
-    const automatico = next.markup == null || !!next.markup_ref_presupuesto_id;
-    if (anterior?.mismoCosto && automatico) return { ...next, markup: anterior.markup, markup_ref_presupuesto_id: anterior.presupuestoId };
-    if (next.markup_ref_presupuesto_id) return { ...next, markup: null, markup_ref_presupuesto_id: null };
-    return next;
-  }
+  const conMarkupAnterior = (l: LineaInput, cambios: Partial<LineaInput>, presupuestoId: string | null) =>
+    aplicarMarkupAnterior(l, cambios, presupuestoId, porMedida, referencias, hoy);
   const setLinea = (id: string, cambios: Partial<LineaInput>) =>
     setP((prev) => ({ ...prev, lineas: prev.lineas.map((l) => (l.id === id ? conMarkupAnterior(l, cambios, prev.id ?? null) : l)) }));
   const agregar = (l: LineaInput) => setP((prev) => ({ ...prev, lineas: [...prev.lineas, l] }));
@@ -117,6 +136,12 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo, refer
       setLinea(l.id, { concepto: texto });
     }
   }
+
+  // Líneas cuyo precio o markup difiere del que tiene hoy el concepto en Conceptos.
+  const desactualizadas = p.lineas.filter((l) => {
+    const c = l.concepto_id ? conceptoPorId.get(l.concepto_id) : undefined;
+    return !!c && ((c.tarifa != null && c.tarifa !== l.precio_unitario) || c.markup !== l.markup_concepto);
+  }).length;
 
   function actualizarPrecios() {
     setP((prev) => ({
@@ -137,7 +162,7 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo, refer
 
   // Líneas "por defecto" con las que arrancó un presupuesto nuevo: se sacan si el área no las usa (Trade)
   // y vuelven si se cambia a un área que sí. Solo se sacan las que siguen sin completar (cantidad 0).
-  const [porDefecto] = useState(() => (inicial.id ? [] : inicial.lineas));
+  const porDefecto = arranque.id ? [] : arranque.lineas;
   function cambiarArea(areaId: string | null) {
     const area = cat.areas.find((a) => a.id === areaId);
     const ids = new Set(porDefecto.map((l) => l.id));
@@ -184,7 +209,8 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo, refer
   const guardar = () =>
     ejecutar(
       () => guardarPresupuesto({ ...p, lineas: ordenarLineas() }),
-      (id) => (!p.id && id ? router.push(`/presupuestos/${id}`) : router.refresh()),
+      // Al guardar se vuelve al listado de presupuestos.
+      () => router.push("/presupuestos"),
     );
 
   const aprobar = () =>
@@ -262,6 +288,7 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo, refer
               lineas={p.lineas.filter((l) => l.rubro_id === r.id)}
               porMedida={!!r.porMedida}
               comparar={(l) => comparar(medidaDe(l), referencias, p.id ?? null, hoy)}
+              areaId={p.area_id}
               {...{ cat, params, congelado, setLinea, quitar, cambiarConcepto }}
               onAgregar={() => agregar(lineaVacia(r.id))}
             />
@@ -272,6 +299,7 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo, refer
               rubroId={null}
               lineas={sinRubro}
               comparar={(l) => comparar(medidaDe(l), referencias, p.id ?? null, hoy)}
+              areaId={p.area_id}
               {...{ cat, params, congelado, setLinea, quitar, cambiarConcepto }}
               onAgregar={() => agregar(lineaVacia(null))}
             />
@@ -324,8 +352,15 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo, refer
             <div className="flex flex-col gap-2 pt-3">
               {!congelado && <button className="btn" onClick={guardar} disabled={pendiente}>{pendiente ? "Guardando…" : "Guardar borrador"}</button>}
               {!congelado && p.id && <button className="btn-sec" onClick={aprobar} disabled={pendiente}>Aprobar y congelar</button>}
-              {!congelado && p.lineas.some((l) => l.concepto_id) && (
-                <button className="btn-sec" onClick={actualizarPrecios} disabled={pendiente}>Actualizar precios desde Conceptos</button>
+              {!congelado && desactualizadas > 0 && (
+                <button
+                  className="btn-sec"
+                  onClick={actualizarPrecios}
+                  disabled={pendiente}
+                  title="En Conceptos cambió la tarifa o el markup de estos conceptos desde que se cargaron en el presupuesto"
+                >
+                  Actualizar {desactualizadas === 1 ? "1 precio" : `${desactualizadas} precios`} desde Conceptos
+                </button>
               )}
               {congelado && estado !== "facturado" && p.id && (
                 <button className="btn-sec" onClick={() => ejecutar(() => crearNuevaVersion(p.id!))} disabled={pendiente}>Crear nueva versión</button>
@@ -389,7 +424,9 @@ function SeccionRubro({
   onAgregar,
   porMedida = false,
   comparar: compararLinea,
+  areaId,
 }: {
+  areaId: string | null;
   titulo: string;
   rubroId: string | null;
   lineas: LineaInput[];
@@ -404,7 +441,8 @@ function SeccionRubro({
   onAgregar: () => void;
 }) {
   const listaId = `conceptos-${rubroId ?? "todos"}`;
-  const conceptos = rubroId ? cat.conceptos.filter((c) => c.rubro_id === rubroId) : cat.conceptos;
+  const delArea = conceptosParaArea(cat.conceptos, areaId);
+  const conceptos = rubroId ? delArea.filter((c) => c.rubro_id === rubroId) : delArea;
   const calc = lineas.map((l) => calcularLinea(aLinea(l), params));
   const costo = calc.reduce((s, r) => s + r.costo, 0);
   const venta = calc.reduce((s, r) => s + r.venta, 0);

@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { EditorPresupuesto } from "@/components/editor-presupuesto";
+import { ReiniciarAlEntrar } from "@/components/reiniciar-al-entrar";
 import { lineaDesdeConcepto } from "@/lib/lineas";
 import { catalogo, referenciasMedidas } from "@/lib/servicios/datos";
 import { hoy } from "@/lib/formato";
@@ -24,24 +25,26 @@ async function Nuevo() {
     .sort((a, b) => (orden.get(a.rubro_id) ?? 99) - (orden.get(b.rubro_id) ?? 99))
     .map((c) => lineaDesdeConcepto(c, c.cantidad_def ?? 0));
   return (
-    <EditorPresupuesto
-      cat={cat}
-      estado="borrador"
-      version={1}
-      codigo={null}
-      referencias={referencias}
-      hoy={hoy()}
-      inicial={{
-        cliente_id: null,
-        marca: null,
-        titulo: "",
-        area_id: null,
-        responsable: null,
-        fecha_elaboracion: hoy(),
-        fecha_evento: null,
-        notas: null,
-        lineas: porDefecto,
-      }}
-    />
+    <ReiniciarAlEntrar>
+      <EditorPresupuesto
+        cat={cat}
+        estado="borrador"
+        version={1}
+        codigo={null}
+        referencias={referencias}
+        hoy={hoy()}
+        inicial={{
+          cliente_id: null,
+          marca: null,
+          titulo: "",
+          area_id: null,
+          responsable: null,
+          fecha_elaboracion: hoy(),
+          fecha_evento: null,
+          notas: null,
+          lineas: porDefecto,
+        }}
+      />
+    </ReiniciarAlEntrar>
   );
 }
