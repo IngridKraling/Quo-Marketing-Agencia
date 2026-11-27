@@ -442,10 +442,12 @@ export async function guardarConcepto(_: Resultado, form: FormData): Promise<Res
   if (fila.markup != null && fila.markup <= 0) return error("El markup es un multiplicador (ej. 1.4)");
   const ocultas = z.array(z.string().uuid()).safeParse(form.getAll("areas_ocultas"));
   if (!ocultas.success) return error("Revisá las áreas donde se oculta");
+  const porDefecto = z.array(z.string().uuid()).safeParse(form.getAll("por_defecto_areas"));
+  if (!porDefecto.success) return error("Revisá las áreas por defecto");
   return guardarFila(
     "conceptos",
     id,
-    { ...fila, por_defecto: form.get("por_defecto") != null, areas_ocultas: ocultas.data, activo: activoDe(form) },
+    { ...fila, por_defecto_areas: porDefecto.data, areas_ocultas: ocultas.data, activo: activoDe(form) },
     "/conceptos",
     "Concepto guardado",
   );
@@ -553,7 +555,7 @@ export async function guardarArea(_: Resultado, form: FormData): Promise<Resulta
     "areas",
     id,
     // En el alta (sin id) el checkbox arranca tildado.
-    { ...fila, carga_por_defecto: form.get("carga_por_defecto") != null || !id, activo: activoDe(form) },
+    { ...fila, activo: activoDe(form) },
     "/configuracion",
     "Área guardada",
   );

@@ -14,7 +14,8 @@ export type Concepto = {
   tarifa: number | null;
   proveedor: string | null;
   markup: number | null;
-  por_defecto: boolean;
+  /** Áreas en las que el concepto se carga solo al crear un presupuesto. */
+  por_defecto_areas: string[];
   cantidad_def: number | null;
   horas_def: number | null;
   dias_def: number | null;
@@ -30,8 +31,7 @@ export type Catalogo = {
   conceptos: Concepto[];
   /** Proveedores activos con los rubros en que trabajan (vacío = sin asignar). */
   proveedores: ProveedorRubros[];
-  /** cargaPorDefecto = false: un presupuesto nuevo de esa área arranca sin las líneas "por defecto" (Trade). */
-  areas: (Opcion & { cargaPorDefecto: boolean })[];
+  areas: Opcion[];
   clientes: Opcion[];
   marcas: Marca[];
   responsables: string[];
@@ -98,7 +98,7 @@ export async function catalogo(): Promise<Catalogo> {
     supabase.from("rubros").select("id, nombre, alerta_sin_cotizar, revisar_si_se_usa, area_id, por_medida").eq("activo", true).order("orden"),
     supabase.from("conceptos").select("*, proveedores(nombre)").eq("activo", true).order("nombre"),
     supabase.from("proveedores").select("nombre, proveedor_rubros(rubro_id)").eq("activo", true).order("nombre"),
-    supabase.from("areas").select("id, nombre, carga_por_defecto").eq("activo", true).order("orden"),
+    supabase.from("areas").select("id, nombre").eq("activo", true).order("orden"),
     supabase.from("clientes").select("id, nombre").eq("activo", true).order("nombre"),
     supabase.from("marcas").select("cliente_id, nombre").eq("activo", true).order("nombre"),
     supabase.from("responsables").select("nombre").eq("activo", true).order("nombre"),
@@ -123,7 +123,7 @@ export async function catalogo(): Promise<Catalogo> {
       tarifa: numONull(c.tarifa),
       proveedor: (c.proveedores as { nombre: string } | null)?.nombre ?? null,
       markup: numONull(c.markup),
-      por_defecto: c.por_defecto,
+      por_defecto_areas: (c.por_defecto_areas as string[] | null) ?? [],
       cantidad_def: numONull(c.cantidad_def),
       horas_def: numONull(c.horas_def),
       dias_def: numONull(c.dias_def),
@@ -133,7 +133,7 @@ export async function catalogo(): Promise<Catalogo> {
       nombre: p.nombre,
       rubroIds: ((p.proveedor_rubros as { rubro_id: string }[] | null) ?? []).map((r) => r.rubro_id),
     })),
-    areas: (areas.data ?? []).map((a) => ({ id: a.id, nombre: a.nombre, cargaPorDefecto: a.carga_por_defecto !== false })),
+    areas: areas.data ?? [],
     clientes: (clientes.data ?? []).sort((a, b) => alfabetico(a.nombre, b.nombre)),
     marcas: (marcas.data ?? []).sort((a, b) => alfabetico(a.nombre, b.nombre)),
     responsables: (responsables.data ?? []).map((r) => r.nombre).sort(alfabetico),

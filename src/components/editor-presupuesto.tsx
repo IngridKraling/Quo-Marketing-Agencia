@@ -160,19 +160,22 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo, refer
   const opcionesMarca = p.marca && !marcas.includes(p.marca) ? [p.marca, ...marcas] : marcas;
   const opcionesResponsable = p.responsable && !cat.responsables.includes(p.responsable) ? [p.responsable, ...cat.responsables] : cat.responsables;
 
-  // Líneas "por defecto" con las que arrancó un presupuesto nuevo: se sacan si el área no las usa (Trade)
-  // y vuelven si se cambia a un área que sí. Solo se sacan las que siguen sin completar (cantidad 0).
-  const porDefecto = arranque.id ? [] : arranque.lineas;
+  // Presupuesto nuevo: al elegir el área se cargan sus conceptos "por defecto" (Conceptos → Por defecto en).
+  // Si se cambia de área, se sacan los de la anterior que no se tocaron y se cargan los de la nueva.
+  const [porDefecto, setPorDefecto] = useState<LineaInput[]>([]);
   function cambiarArea(areaId: string | null) {
-    const area = cat.areas.find((a) => a.id === areaId);
-    const ids = new Set(porDefecto.map((l) => l.id));
-    setP((prev) => {
-      if (area && !area.cargaPorDefecto) {
-        return { ...prev, area_id: areaId, lineas: prev.lineas.filter((l) => !ids.has(l.id) || l.cantidad !== 0) };
-      }
-      const faltan = porDefecto.filter((d) => !prev.lineas.some((l) => l.id === d.id));
-      return { ...prev, area_id: areaId, lineas: [...faltan, ...prev.lineas] };
-    });
+    const sinTocar = (l: LineaInput) => porDefecto.some((d) => d.id === l.id && JSON.stringify(d) === JSON.stringify(l));
+    const quedan = p.lineas.filter((l) => !sinTocar(l));
+    const orden = new Map(cat.rubros.map((r, i) => [r.id, i]));
+    const rubrosDelArea = new Set(rubrosParaArea(cat.rubros, areaId).map((r) => r.id));
+    const nuevas = areaId
+      ? conceptosParaArea(cat.conceptos, areaId)
+          .filter((c) => c.por_defecto_areas.includes(areaId) && rubrosDelArea.has(c.rubro_id) && !quedan.some((l) => l.concepto_id === c.id))
+          .sort((a, b) => (orden.get(a.rubro_id) ?? 999) - (orden.get(b.rubro_id) ?? 999))
+          .map((c) => lineaDesdeConcepto(c, c.cantidad_def ?? 0))
+      : [];
+    setPorDefecto(nuevas);
+    setP((prev) => ({ ...prev, area_id: areaId, lineas: agruparPorRubro([...nuevas, ...quedan]) }));
   }
 
   function cambiarCliente(clienteId: string | null) {

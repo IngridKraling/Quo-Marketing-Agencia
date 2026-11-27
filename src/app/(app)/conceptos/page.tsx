@@ -14,7 +14,7 @@ export default function Page({ searchParams }: PageProps<"/conceptos">) {
         <h1 className="text-xl font-semibold">Conceptos</h1>
         <p className="text-sm text-zinc-500">
           La base de todo lo que se presupuesta. La tarifa es el costo neto (vacía = se cotiza en cada presupuesto); el markup es un
-          multiplicador (1,4 = +40 %) y si queda vacío se usa el general. Los marcados “Por defecto” se cargan solos en cada presupuesto nuevo.
+          multiplicador (1,4 = +40 %) y si queda vacío se usa el general. Con <b>Por defecto en</b> elegís en qué áreas el concepto se carga solo al crear un presupuesto.
           Cada rubro es de un área (se cambia en Configuración); los <b>comunes</b> aparecen en todas. En Trade el markup sale del tramo
           según el costo total del presupuesto. Para algo que no está en la lista, usá <b>OTROS</b> (rubro Otros, BTL) y escribí encima el concepto; en Trade, <b>Varios</b>.
           Con <b>Ocultar en</b> un concepto de un rubro común deja de ofrecerse en esa área (ej. Promotoras en Trade).
@@ -35,6 +35,7 @@ function Campos({
   proveedores,
   porTramo,
   areas,
+  todasLasAreas,
 }: {
   c?: Record<string, unknown>;
   rubros: Opc[];
@@ -42,8 +43,11 @@ function Campos({
   porTramo?: boolean;
   /** Áreas en las que se puede ocultar el concepto (las que tienen catálogo propio). */
   areas: Opc[];
+  /** Todas las áreas, para elegir en cuáles se carga por defecto. */
+  todasLasAreas: Opc[];
 }) {
   const ocultas = (c?.areas_ocultas as string[] | null) ?? [];
+  const porDefecto = (c?.por_defecto_areas as string[] | null) ?? [];
   const v = (k: string) => (c?.[k] == null ? "" : String(c[k]));
   return (
     <>
@@ -65,7 +69,14 @@ function Campos({
         {proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
       </select>
       <input name="markup" type="number" step="any" min="0" defaultValue={v("markup")} placeholder={porTramo ? "Tramo" : "Markup"} title={porTramo ? "Vacío: se usa el markup por tramo del presupuesto" : undefined} className="input w-20" aria-label="Markup propio" />
-      <label className="flex items-center gap-1 text-xs"><input type="checkbox" name="por_defecto" defaultChecked={c?.por_defecto === true} /> Por defecto</label>
+      <span className="flex flex-wrap items-center gap-2 text-xs text-zinc-500" title="Se carga solo al crear un presupuesto de esas áreas">
+        Por defecto en:
+        {todasLasAreas.map((a) => (
+          <label key={a.id} className="flex items-center gap-1">
+            <input type="checkbox" name="por_defecto_areas" value={a.id} defaultChecked={porDefecto.includes(a.id)} /> {a.nombre}
+          </label>
+        ))}
+      </span>
       <span className="flex flex-wrap items-center gap-2 text-xs text-zinc-500" title="El concepto no se ofrece en los presupuestos de esas áreas">
         Ocultar en:
         {areas.map((a) => (
@@ -126,7 +137,7 @@ async function Listado({ searchParams }: { searchParams: Promise<Record<string, 
       <section className="card space-y-2">
         <h2 className="font-medium">Nuevo concepto</h2>
         <FormAccion action={guardarConcepto} boton="Agregar" className="flex flex-wrap items-center gap-2">
-          <Campos rubros={r} proveedores={p} areas={areasConRubros} />
+          <Campos rubros={r} proveedores={p} areas={areasConRubros} todasLasAreas={areas ?? []} />
         </FormAccion>
       </section>
       {r.filter(visible).map((rubro) => {
@@ -143,7 +154,7 @@ async function Listado({ searchParams }: { searchParams: Promise<Record<string, 
             </h2>
             {lista.map((c) => (
               <FormAccion key={c.id} action={guardarConcepto} boton="Guardar" variante="sec" className={`flex flex-wrap items-center gap-2 border-t border-zinc-100 pt-2 ${c.activo ? "" : "opacity-60"}`}>
-                <Campos c={c} rubros={r} proveedores={p} porTramo={porTramo} areas={areasConRubros} />
+                <Campos c={c} rubros={r} proveedores={p} porTramo={porTramo} areas={areasConRubros} todasLasAreas={areas ?? []} />
               </FormAccion>
             ))}
           </section>
