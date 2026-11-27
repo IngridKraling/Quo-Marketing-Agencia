@@ -320,21 +320,22 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo, refer
           </fieldset>
         </div>
 
-        <aside className="order-first grid h-fit gap-4 md:grid-cols-2 2xl:order-none 2xl:sticky 2xl:top-4 2xl:block 2xl:space-y-4">
-          <div className="card space-y-1.5">
-            <h2 className="mb-1 font-medium">Resumen</h2>
+        {/* Arriba (pantallas medianas): dos recuadros compactos uno al lado del otro. A la derecha (pantallas grandes): columna fija. */}
+        <aside className="order-first flex h-fit flex-wrap items-start gap-3 2xl:order-none 2xl:sticky 2xl:top-4 2xl:block 2xl:space-y-3">
+          <div className="card w-full space-y-1 p-3 sm:w-[360px] 2xl:w-auto">
+            <h2 className="text-sm font-medium">Resumen</h2>
             {/* Lo que se le pasa al cliente: bien a la vista. */}
-            <div className="mb-3 rounded-lg bg-emerald-600 px-4 py-3 text-white shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-100">Precio de venta al cliente</p>
-              <p className="text-3xl font-bold leading-tight tabular-nums">{pesos(resumen.venta)}</p>
-              <p className="text-xs text-emerald-100">
+            <div className="mb-2 rounded-md bg-emerald-600 px-3 py-2 text-white shadow-sm">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-100">Precio de venta al cliente</p>
+              <p className="text-2xl font-bold leading-tight tabular-nums">{pesos(resumen.venta)}</p>
+              <p className="text-[11px] text-emerald-100">
                 Neto, sin IVA · Con IVA ({decimal(params.ivaPct)} %): <b className="tabular-nums text-white">{pesos(conIva(resumen.venta, params.ivaPct))}</b>
               </p>
             </div>
             {/* Costo total: destacado, pero un escalón por debajo del precio de venta. */}
-            <div className="mb-2 flex items-baseline justify-between gap-2 rounded-lg border border-zinc-300 bg-zinc-100 px-4 py-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-zinc-600">Costo total</span>
-              <span className="text-xl font-bold tabular-nums text-zinc-900">{pesos(resumen.costo)}</span>
+            <div className="mb-1 flex items-baseline justify-between gap-2 rounded-md border border-zinc-300 bg-zinc-100 px-3 py-1.5">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-600">Costo total</span>
+              <span className="text-lg font-bold tabular-nums text-zinc-900">{pesos(resumen.costo)}</span>
             </div>
             <Fila label={`Impuestos s/venta (${decimal(params.impuestosPct)} %)`} valor={pesos(resumen.impuestos)} />
             <Fila label="Contribución" valor={pesos(resumen.contribucion)} fuerte />
@@ -344,11 +345,11 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo, refer
               clase={resumen.venta > 0 && resumen.margenPct < params.margenMinimoPct ? "text-red-700" : ""}
             />
             {resumen.markupTramo != null && (
-              <Fila label="Markup por tramo" valor={`× ${decimal(resumen.markupTramo)}`} />
+              <Fila label="Markup por tramo" valor={markupPct(resumen.markupTramo)} />
             )}
-            <Fila label="Markup promedio" valor={`× ${decimal(resumen.markupPromedio)}`} />
+            <Fila label="Markup promedio" valor={markupPct(resumen.markupPromedio)} />
 
-            <div className="flex flex-col gap-2 pt-3">
+            <div className="flex flex-col gap-1.5 pt-2">
               {!congelado && <button className="btn" onClick={guardar} disabled={pendiente}>{pendiente ? "Guardando…" : "Guardar borrador"}</button>}
               {!congelado && p.id && <button className="btn-sec" onClick={aprobar} disabled={pendiente}>Aprobar y congelar</button>}
               {!congelado && desactualizadas > 0 && (
@@ -386,8 +387,8 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo, refer
             {mensaje && <p className={`pt-2 text-sm ${mensaje.ok ? "text-green-700" : "text-red-700"}`}>{mensaje.texto}</p>}
           </div>
 
-          <div className="card space-y-2">
-            <h2 className="font-medium">Resumen por rubro</h2>
+          <div className="card w-full space-y-2 p-3 sm:w-[340px] 2xl:w-auto">
+            <h2 className="text-sm font-medium">Resumen por rubro</h2>
             <table className="w-full text-sm">
               <thead><tr><th className="th">Rubro</th><th className="th text-right">Venta</th><th className="th text-right">Margen</th></tr></thead>
               <tbody>
@@ -549,9 +550,12 @@ const conIva = (neto: number, ivaPct: number) => {
   return subtotal + Math.round(subtotal * ivaPct) / 100;
 };
 
+/** Markup como porcentaje sobre el costo: × 1,7 → "70 %". */
+const markupPct = (m: number) => porcentaje(Math.round((m - 1) * 10000) / 100);
+
 function Fila({ label, valor, fuerte, clase = "" }: { label: string; valor: string; fuerte?: boolean; clase?: string }) {
   return (
-    <div className={`flex justify-between gap-2 text-sm ${fuerte ? "font-semibold" : ""}`}>
+    <div className={`flex justify-between gap-2 text-[13px] ${fuerte ? "font-semibold" : ""}`}>
       <span>{label}</span>
       <span className={`whitespace-nowrap tabular-nums ${clase}`}>{valor}</span>
     </div>
