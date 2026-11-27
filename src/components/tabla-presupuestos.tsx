@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ESTADOS, ETIQUETA_ESTADO, type Estado } from "@/lib/presupuesto-calc";
+import { aprobarPresupuesto, cambiarEstado } from "@/app/actions";
+import { COLOR_ESTADO, ESTADOS, ETIQUETA_ESTADO, estadosPosibles, type Estado } from "@/lib/presupuesto-calc";
 import { fecha, pesos, porcentaje } from "@/lib/formato";
 import { alfabetico } from "@/lib/opciones";
 
@@ -25,14 +26,6 @@ export type FilaPresupuesto = {
   costoReal: number | null;
 };
 
-const COLOR: Partial<Record<Estado, string>> = {
-  aprobado: "bg-green-100 text-green-800",
-  en_ejecucion: "bg-blue-100 text-blue-800",
-  finalizado: "bg-indigo-100 text-indigo-800",
-  facturado: "bg-zinc-800 text-white",
-  rechazado: "bg-red-100 text-red-800",
-  cancelado: "bg-red-100 text-red-800",
-};
 
 type Columna =
   | "codigo" | "cliente" | "titulo" | "responsable" | "area" | "fechaElaboracion" | "fechaEvento"
@@ -83,6 +76,26 @@ const enRango = (valor: string | null, desde: string, hasta: string) =>
 export function TablaPresupuestos({ filas }: { filas: FilaPresupuesto[] }) {
   const router = useRouter();
   const [f, setF] = useState<Filtros>(FILTROS_VACIOS);
+  // Estado cambiado desde la lista: se muestra al instante mientras se guarda.
+  const [estados, setEstados] = useState<Record<string, Estado>>({});
+  const [aviso, setAviso] = useState<{ ok: boolean; texto: string } | null>(null);
+  const [guardando, startTransition] = useTransition();
+
+  function cambiar(p: FilaPresupuesto, nuevo: Estado) {
+    const anterior = estados[p.id] ?? p.estado;
+    setEstados((e) => ({ ...e, [p.id]: nuevo }));
+    startTransition(async () => {
+      // Aprobar valida el presupuesto y lo congela (igual que el botón del editor).
+      const r = nuevo === "aprobado" ? await aprobarPresupuesto(p.id) : await cambiarEstado(p.id, nuevo);
+      if (r?.ok) {
+        setAviso({ ok: true, texto: `${p.codigo ?? p.titulo}: ${ETIQUETA_ESTADO[nuevo]}` });
+        router.refresh();
+      } else {
+        setEstados((e) => ({ ...e, [p.id]: anterior }));
+        setAviso({ ok: false, texto: `${p.codigo ?? p.titulo}: ${r?.mensaje ?? "no se pudo cambiar el estado"}` });
+      }
+    });
+  }
   const [orden, setOrden] = useState<{ col: Columna; asc: boolean } | null>(null);
   const set = (k: keyof Filtros, v: string) => setF((prev) => ({ ...prev, [k]: v, ...(k === "cliente" ? { marca: "" } : {}) }));
 
@@ -174,6 +187,11 @@ export function TablaPresupuestos({ filas }: { filas: FilaPresupuesto[] }) {
         {hayFiltros && <button type="button" className="btn-sec" onClick={() => setF(FILTROS_VACIOS)}>Limpiar filtros</button>}
       </div>
 
+      {aviso && (
+        <p className={`rounded-md px-3 py-2 text-sm ${aviso.ok ? "bg-green-50 text-green-800" : "bg-red-50 text-red-800"}`} role="status">
+          {aviso.texto}
+        </p>
+      )}
       <p className="text-sm text-zinc-500">
         {visibles.length === filas.length ? `${filas.length} presupuestos` : `${visibles.length} de ${filas.length} presupuestos`}
         {" · "}Clic en el título de una columna para ordenar.
@@ -203,8 +221,21 @@ export function TablaPresupuestos({ filas }: { filas: FilaPresupuesto[] }) {
                 <td className="td">{p.area ?? "—"}</td>
                 <td className="td whitespace-nowrap">{fecha(p.fechaElaboracion)}</td>
                 <td className="td whitespace-nowrap">{fecha(p.fechaEvento)}</td>
-                <td className="td whitespace-nowrap">
-                  <span className={`rounded px-2 py-0.5 text-xs ${COLOR[p.estado] ?? "bg-zinc-100"}`}>{ETIQUETA_ESTADO[p.estado]}</span>
+                <td className="td whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                  {(() => {
+                    const actual = estados[p.id] ?? p.estado;
+                    return (
+                      <select
+                        className={`cursor-pointer rounded-md border px-2 py-1 text-xs font-medium ${COLOR_ESTADO[actual]}`}
+                        value={actual}
+                        disabled={guardando}
+                        aria-label={`Estado de ${p.codigo ?? p.titulo}`}
+                        onChange={(e) => cambiar(p, e.target.value as Estado)}
+                      >
+                        {estadosPosibles(actual).map((e) => <option key={e} value={e} className="bg-white text-zinc-900">{ETIQUETA_ESTADO[e]}</option>)}
+                      </select>
+                    );
+                  })()}
                   {p.version > 1 && <span className="ml-1 text-xs text-zinc-500">v{p.version}</span>}
                 </td>
                 <td className="td text-right tabular-nums">{pesos(p.costo)}</td>

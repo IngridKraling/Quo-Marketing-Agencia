@@ -12,11 +12,11 @@ import {
   type PresupuestoInput,
 } from "@/app/actions";
 import {
-  ESTADOS,
   ETIQUETA_ESTADO,
   calcularLinea,
   conTramo,
   estaCongelado,
+  estadosPosibles,
   paramsDeArea,
   resumenPresupuesto,
   type Estado,
@@ -220,10 +220,8 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo, refer
       return aprobarPresupuesto(p.id);
     });
 
-  const estadosPosibles = ESTADOS.filter((e) =>
-    e === estado ||
-    (congelado ? ["en_ejecucion", "finalizado", "facturado", "cancelado"].includes(e) : ["borrador", "enviado", "rechazado", "cancelado"].includes(e)),
-  );
+  // "Aprobado" se hace con el botón "Aprobar y congelar" (guarda antes de aprobar).
+  const posibles = estadosPosibles(estado).filter((e) => e !== "aprobado" || estado === "aprobado");
 
   return (
     <div className="space-y-4">
@@ -373,7 +371,7 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo, refer
                     disabled={pendiente}
                     onChange={(e) => ejecutar(() => cambiarEstado(p.id!, e.target.value as Estado))}
                   >
-                    {estadosPosibles.map((e) => <option key={e} value={e}>{ETIQUETA_ESTADO[e]}</option>)}
+                    {posibles.map((e) => <option key={e} value={e}>{ETIQUETA_ESTADO[e]}</option>)}
                   </select>
                 </label>
               )}

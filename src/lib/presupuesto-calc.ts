@@ -30,6 +30,29 @@ export const ETIQUETA_ESTADO: Record<Estado, string> = {
 /** Estados en los que el presupuesto quedó congelado (solo se cargan costos reales). */
 export const estaCongelado = (e: Estado) => e === "aprobado" || e === "en_ejecucion" || e === "finalizado" || e === "facturado";
 
+/**
+ * Estados a los que se puede pasar desde el actual. "Aprobado" solo desde uno sin aprobar (valida y congela,
+ * con aprobarPresupuesto); una vez aprobado no se vuelve a borrador/enviado (hay que crear una nueva versión).
+ */
+export function estadosPosibles(actual: Estado): Estado[] {
+  const permitidos: Estado[] = estaCongelado(actual)
+    ? ["en_ejecucion", "finalizado", "facturado", "cancelado"]
+    : ["borrador", "enviado", "aprobado", "rechazado", "cancelado"];
+  return ESTADOS.filter((e) => e === actual || permitidos.includes(e));
+}
+
+/** Color de cada estado: verde = aprobado; rojo = rechazado/cancelado; ámbar = pendiente (borrador/enviado). */
+export const COLOR_ESTADO: Record<Estado, string> = {
+  borrador: "bg-amber-50 text-amber-800 border-amber-200",
+  enviado: "bg-amber-100 text-amber-900 border-amber-300",
+  aprobado: "bg-green-100 text-green-800 border-green-300",
+  en_ejecucion: "bg-blue-100 text-blue-800 border-blue-300",
+  finalizado: "bg-indigo-100 text-indigo-800 border-indigo-300",
+  facturado: "bg-zinc-800 text-white border-zinc-800",
+  rechazado: "bg-red-100 text-red-800 border-red-300",
+  cancelado: "bg-red-100 text-red-800 border-red-300",
+};
+
 export type Parametros = {
   markupDefault: number;
   /** Suma de los impuestos s/venta activos, en %. */
