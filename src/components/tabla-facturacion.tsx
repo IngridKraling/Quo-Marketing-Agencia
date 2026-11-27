@@ -46,8 +46,8 @@ const aInput = (f: FilaFactura): FacturaInput => ({
 });
 
 const MESES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
-/** "2026-11" → "Nov 2026". */
-const nombreMes = (aaaamm: string) => `${MESES[Number(aaaamm.slice(5, 7)) - 1]} ${aaaamm.slice(0, 4)}`;
+/** "2026-11" → "Nov 26". */
+const nombreMes = (aaaamm: string) => `${MESES[Number(aaaamm.slice(5, 7)) - 1]} ${aaaamm.slice(2, 4)}`;
 /** Opciones de período: del mes que viene hacia atrás, 18 meses. */
 function opcionesMes(hoy = new Date()) {
   return Array.from({ length: 18 }, (_, i) => {
@@ -236,7 +236,7 @@ export function TablaFacturacion({ filas: iniciales }: { filas: FilaFactura[] })
         <table className="w-full min-w-[1620px]">
           <thead>
             <tr>
-              <th className="th w-28">Período</th>
+              <th className="th w-24">Período</th>
               <th className="th">Área</th>
               <th className="th min-w-40">Cliente</th>
               <th className="th min-w-36">Marca</th>
@@ -258,7 +258,7 @@ export function TablaFacturacion({ filas: iniciales }: { filas: FilaFactura[] })
               return (
                 <tr key={f.id} className="align-top">
                   <td className="td">
-                    <select className="input w-28 px-1.5 text-xs" aria-label="Período de facturación" value={f.periodo} onChange={(e) => guardar(f.id, { periodo: e.target.value })}>
+                    <select className="input w-24 px-1.5 text-xs" aria-label="Período de facturación" value={f.periodo} onChange={(e) => guardar(f.id, { periodo: e.target.value })}>
                       <option value="">—</option>
                       {(meses.some((m) => m.valor === f.periodo) || !f.periodo ? meses : [{ valor: f.periodo, nombre: nombreMes(f.periodo) }, ...meses]).map((m) => (
                         <option key={m.valor} value={m.valor}>{m.nombre}</option>
