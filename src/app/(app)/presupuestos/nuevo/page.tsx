@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { EditorPresupuesto } from "@/components/editor-presupuesto";
 import { lineaDesdeConcepto } from "@/lib/lineas";
-import { catalogo } from "@/lib/servicios/datos";
+import { catalogo, referenciasMedidas } from "@/lib/servicios/datos";
 import { hoy } from "@/lib/formato";
 
 export default function Page() {
@@ -16,7 +16,7 @@ export default function Page() {
 }
 
 async function Nuevo() {
-  const cat = await catalogo();
+  const [cat, referencias] = await Promise.all([catalogo(), referenciasMedidas()]);
   // Líneas por defecto (marcadas en Conceptos): vienen con cantidad 0 para completar o borrar.
   const orden = new Map(cat.rubros.map((r, i) => [r.id, i]));
   const porDefecto = cat.conceptos
@@ -29,6 +29,8 @@ async function Nuevo() {
       estado="borrador"
       version={1}
       codigo={null}
+      referencias={referencias}
+      hoy={hoy()}
       inicial={{
         cliente_id: null,
         marca: null,

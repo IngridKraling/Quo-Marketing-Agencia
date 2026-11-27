@@ -93,7 +93,8 @@ async function Contenido() {
           <h2 className="font-medium">Rubros</h2>
           <p className="text-sm text-zinc-500">
             <b>Sin cotizar</b>: avisa si el rubro queda en 0 (logística, viáticos…). <b>Revisar si se usa</b>: avisa si tiene costo (ej. Otros).
-            El <b>área</b> define en qué presupuestos aparece; “Común” aparece en todos.
+            El <b>área</b> define en qué presupuestos aparece; “Común” aparece en todos. <b>Por medida</b>: las líneas se cargan con base × altura,
+            piezas y cotización total, y se compara el $/m² (Trade).
           </p>
         </div>
         {rubros?.map((r) => (
@@ -104,6 +105,7 @@ async function Contenido() {
             {areaSelect(r.area_id)}
             <label className="flex items-center gap-1 text-xs"><input type="checkbox" name="alerta_sin_cotizar" defaultChecked={r.alerta_sin_cotizar} /> Sin cotizar</label>
             <label className="flex items-center gap-1 text-xs"><input type="checkbox" name="revisar_si_se_usa" defaultChecked={r.revisar_si_se_usa} /> Revisar si se usa</label>
+            <label className="flex items-center gap-1 text-xs" title="Se cotiza con base × altura, piezas y cotización total (Trade)"><input type="checkbox" name="por_medida" defaultChecked={r.por_medida} /> Por medida</label>
             <Activo valor={r.activo} />
           </FormAccion>
         ))}

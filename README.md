@@ -19,6 +19,10 @@ Stack: Next.js 16 (App Router) en Vercel · Supabase (Postgres + Auth) · TypeSc
   - markup = el de la línea › el del tramo › el del concepto › el general (multiplicador: 1,4 = +40 %)
   - **markup por tramo** (Trade): según el costo total del presupuesto (hasta $1.000.000 ×1,7; hasta $2.000.000 ×1,6;
     hasta $3.500.000 ×1,55; más ×1,5). Se edita en Configuración; “hasta” incluye el monto.
+  - **líneas por medida** (rubros de Trade): base × altura, piezas y cotización total del proveedor → m² y $/m²
+    (o $/pieza). Se compara con la última cotización del mismo proveedor y con el promedio de los últimos 6 meses.
+    Si un presupuesto ya enviado tiene el mismo concepto, proveedor, medidas y costo, se mantiene su markup
+    (con un aviso y link a ese presupuesto) para no cambiarle el precio al cliente. Ver `src/lib/medidas.ts`.
   - venta = costo × markup · impuestos s/venta = venta × impuestos activos (IIBB) · contribución = venta − costo − impuestos
   - alertas por rubro: sin cotizar, revisar “Otros”, margen bajo.
 - **Aprobar y congelar**: valida (sin cantidades en 0, sin líneas sin rubro ni precio), guarda una copia de la versión y la bloquea.

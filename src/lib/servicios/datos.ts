@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { numONull, type Origen, type Parametros, type RubroInfo, type TramoArea } from "@/lib/presupuesto-calc";
+import { numONull, type Estado, type Origen, type Parametros, type RubroInfo, type TramoArea } from "@/lib/presupuesto-calc";
+import type { Referencia } from "@/lib/medidas";
 import { alfabetico, type Marca } from "@/lib/opciones";
 
 export type Concepto = {
@@ -55,13 +56,41 @@ export async function tramos(): Promise<TramoArea[]> {
   return (data ?? []).map((t) => ({ areaId: t.area_id, hasta: numONull(t.hasta), markup: Number(t.markup) }));
 }
 
+/** Líneas por medida de todos los presupuestos (menos cancelados), para comparar costos y markups. */
+export async function referenciasMedidas(): Promise<Referencia[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("presupuesto_lineas")
+    .select("concepto_id, concepto, proveedor, base, altura, cantidad, cotizacion_total, markup_aplicado, presupuesto_id, presupuestos!inner(codigo, estado, fecha_elaboracion)")
+    .not("cotizacion_total", "is", null)
+    .eq("presupuestada", true)
+    .neq("presupuestos.estado", "cancelado");
+  return (data ?? []).map((l) => {
+    const p = l.presupuestos as unknown as { codigo: string | null; estado: Estado; fecha_elaboracion: string | null };
+    return {
+      conceptoId: l.concepto_id,
+      concepto: l.concepto,
+      proveedor: l.proveedor,
+      base: numONull(l.base),
+      altura: numONull(l.altura),
+      piezas: numONull(l.cantidad),
+      cotizacionTotal: numONull(l.cotizacion_total),
+      markupAplicado: numONull(l.markup_aplicado),
+      presupuestoId: l.presupuesto_id,
+      codigo: p.codigo,
+      estado: p.estado,
+      fecha: p.fecha_elaboracion,
+    };
+  });
+}
+
 /** Todo lo que necesitan el editor y la carga de costos reales. */
 export async function catalogo(): Promise<Catalogo> {
   const supabase = await createClient();
   const [params, listaTramos, rubros, conceptos, proveedores, areas, clientes, marcas, responsables] = await Promise.all([
     parametros(),
     tramos(),
-    supabase.from("rubros").select("id, nombre, alerta_sin_cotizar, revisar_si_se_usa, area_id").eq("activo", true).order("orden"),
+    supabase.from("rubros").select("id, nombre, alerta_sin_cotizar, revisar_si_se_usa, area_id, por_medida").eq("activo", true).order("orden"),
     supabase.from("conceptos").select("*, proveedores(nombre)").eq("activo", true).order("nombre"),
     supabase.from("proveedores").select("nombre").eq("activo", true).order("nombre"),
     supabase.from("areas").select("id, nombre").eq("activo", true).order("orden"),
@@ -78,6 +107,7 @@ export async function catalogo(): Promise<Catalogo> {
       alertaSinCotizar: r.alerta_sin_cotizar,
       revisarSiSeUsa: r.revisar_si_se_usa,
       areaId: r.area_id,
+      porMedida: r.por_medida,
     })),
     conceptos: (conceptos.data ?? []).map((c) => ({
       id: c.id,

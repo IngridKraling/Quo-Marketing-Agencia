@@ -28,6 +28,8 @@ import { decimal, pesos, porcentaje } from "@/lib/formato";
 import { CampoNumero } from "@/components/campo-numero";
 import { CampoPesos } from "@/components/campo-pesos";
 import { aLinea, lineaDesdeConcepto, usaHoras } from "@/lib/lineas";
+import { comparar, type Comparacion, type Referencia } from "@/lib/medidas";
+import { TablaMedidas, medidaDe } from "@/components/lineas-medida";
 
 const ORIGENES: { valor: Origen; etiqueta: string }[] = [
   { valor: "proveedor", etiqueta: "Proveedor" },
@@ -51,6 +53,10 @@ const lineaVacia = (rubroId: string | null): LineaInput => ({
   dias: null,
   markup: null,
   markup_concepto: null,
+  base: null,
+  altura: null,
+  cotizacion_total: null,
+  markup_ref_presupuesto_id: null,
 });
 
 type Props = {
@@ -59,9 +65,12 @@ type Props = {
   estado: Estado;
   version: number;
   codigo: string | null;
+  /** Líneas por medida de otros presupuestos, para comparar $/m² y respetar markups ya enviados. */
+  referencias: Referencia[];
+  hoy: string;
 };
 
-export function EditorPresupuesto({ cat, inicial, estado, version, codigo }: Props) {
+export function EditorPresupuesto({ cat, inicial, estado, version, codigo, referencias, hoy }: Props) {
   const [p, setP] = useState(inicial);
   const [mensaje, setMensaje] = useState<{ ok: boolean; texto: string } | null>(null);
   const [pendiente, startTransition] = useTransition();
@@ -74,8 +83,25 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo }: Pro
   const conceptoPorId = useMemo(() => new Map(cat.conceptos.map((c) => [c.id, c])), [cat.conceptos]);
 
   const set = <K extends keyof PresupuestoInput>(k: K, v: PresupuestoInput[K]) => setP((prev) => ({ ...prev, [k]: v }));
+  const porMedida = useMemo(() => new Set(cat.rubros.filter((r) => r.porMedida).map((r) => r.id)), [cat.rubros]);
+
+  /**
+   * Líneas por medida: si hay un presupuesto enviado con el mismo concepto, proveedor, medidas y costo,
+   * se mantiene su markup (para no cambiarle el precio al cliente). Si después cambia algo, se vuelve al
+   * markup normal. Un markup escrito a mano nunca se pisa.
+   */
+  function conMarkupAnterior(l: LineaInput, cambios: Partial<LineaInput>, presupuestoId: string | null): LineaInput {
+    const next = { ...l, ...cambios };
+    if (!next.rubro_id || !porMedida.has(next.rubro_id)) return next;
+    if ("markup" in cambios) return { ...next, markup_ref_presupuesto_id: null };
+    const anterior = comparar(medidaDe(next), referencias, presupuestoId, hoy).anterior;
+    const automatico = next.markup == null || !!next.markup_ref_presupuesto_id;
+    if (anterior?.mismoCosto && automatico) return { ...next, markup: anterior.markup, markup_ref_presupuesto_id: anterior.presupuestoId };
+    if (next.markup_ref_presupuesto_id) return { ...next, markup: null, markup_ref_presupuesto_id: null };
+    return next;
+  }
   const setLinea = (id: string, cambios: Partial<LineaInput>) =>
-    setP((prev) => ({ ...prev, lineas: prev.lineas.map((l) => (l.id === id ? { ...l, ...cambios } : l)) }));
+    setP((prev) => ({ ...prev, lineas: prev.lineas.map((l) => (l.id === id ? conMarkupAnterior(l, cambios, prev.id ?? null) : l)) }));
   const agregar = (l: LineaInput) => setP((prev) => ({ ...prev, lineas: [...prev.lineas, l] }));
   const quitar = (id: string) => setP((prev) => ({ ...prev, lineas: prev.lineas.filter((l) => l.id !== id) }));
 
@@ -219,6 +245,8 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo }: Pro
               titulo={r.nombre}
               rubroId={r.id}
               lineas={p.lineas.filter((l) => l.rubro_id === r.id)}
+              porMedida={!!r.porMedida}
+              comparar={(l) => comparar(medidaDe(l), referencias, p.id ?? null, hoy)}
               {...{ cat, params, congelado, setLinea, quitar, cambiarConcepto }}
               onAgregar={() => agregar(lineaVacia(r.id))}
             />
@@ -228,6 +256,7 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo }: Pro
               titulo="⚠ Sin rubro (no se puede aprobar)"
               rubroId={null}
               lineas={sinRubro}
+              comparar={(l) => comparar(medidaDe(l), referencias, p.id ?? null, hoy)}
               {...{ cat, params, congelado, setLinea, quitar, cambiarConcepto }}
               onAgregar={() => agregar(lineaVacia(null))}
             />
@@ -273,7 +302,7 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo }: Pro
               clase={resumen.venta > 0 && resumen.margenPct < params.margenMinimoPct ? "text-red-700" : ""}
             />
             {resumen.markupTramo != null && (
-              <Fila label="Markup por tramo (según costo total)" valor={`× ${decimal(resumen.markupTramo)}`} />
+              <Fila label="Markup por tramo" valor={`× ${decimal(resumen.markupTramo)}`} />
             )}
             <Fila label="Markup promedio" valor={`× ${decimal(resumen.markupPromedio)}`} />
 
@@ -343,10 +372,14 @@ function SeccionRubro({
   quitar,
   cambiarConcepto,
   onAgregar,
+  porMedida = false,
+  comparar: compararLinea,
 }: {
   titulo: string;
   rubroId: string | null;
   lineas: LineaInput[];
+  porMedida?: boolean;
+  comparar: (l: LineaInput) => Comparacion;
   cat: Catalogo;
   params: Catalogo["parametros"];
   congelado: boolean;
@@ -372,6 +405,18 @@ function SeccionRubro({
       <datalist id={listaId}>{conceptos.map((c) => <option key={c.id} value={c.nombre} />)}</datalist>
       <div className="-mx-4 overflow-x-auto px-4">
         <fieldset disabled={congelado}>
+          {porMedida ? (
+            <TablaMedidas
+              lineas={lineas}
+              calc={calc}
+              comparaciones={lineas.map(compararLinea)}
+              params={params}
+              congelado={congelado}
+              listaId={listaId}
+              proveedores={cat.proveedores}
+              {...{ setLinea, quitar, cambiarConcepto }}
+            />
+          ) : (
           <table className="w-full min-w-[1400px]">
             <thead>
               <tr>
@@ -432,6 +477,7 @@ function SeccionRubro({
               })}
             </tbody>
           </table>
+          )}
         </fieldset>
       </div>
       {!congelado && <button type="button" className="btn-sec" onClick={onAgregar}>+ Agregar línea</button>}
@@ -449,7 +495,7 @@ function Fila({ label, valor, fuerte, clase = "" }: { label: string; valor: stri
   return (
     <div className={`flex justify-between gap-2 text-sm ${fuerte ? "font-semibold" : ""}`}>
       <span>{label}</span>
-      <span className={`tabular-nums ${clase}`}>{valor}</span>
+      <span className={`whitespace-nowrap tabular-nums ${clase}`}>{valor}</span>
     </div>
   );
 }

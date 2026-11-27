@@ -4,8 +4,8 @@ import { Suspense } from "react";
 import { EditorPresupuesto } from "@/components/editor-presupuesto";
 import { createClient } from "@/lib/supabase/server";
 import { numONull } from "@/lib/presupuesto-calc";
-import { catalogo } from "@/lib/servicios/datos";
-import { fecha, pesos } from "@/lib/formato";
+import { catalogo, referenciasMedidas } from "@/lib/servicios/datos";
+import { fecha, hoy, pesos } from "@/lib/formato";
 
 export default function Page({ params }: PageProps<"/presupuestos/[id]">) {
   return (
@@ -18,10 +18,11 @@ export default function Page({ params }: PageProps<"/presupuestos/[id]">) {
 async function Detalle({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
-  const [{ data: p }, cat, { data: versiones }] = await Promise.all([
+  const [{ data: p }, cat, { data: versiones }, referencias] = await Promise.all([
     supabase.from("presupuestos").select("*, presupuesto_lineas(*)").eq("id", id).maybeSingle(),
     catalogo(),
     supabase.from("presupuesto_versiones").select("id, version, aprobado_at, datos->totales").eq("presupuesto_id", id).order("version", { ascending: false }),
+    referenciasMedidas(),
   ]);
   if (!p) notFound();
 
@@ -44,6 +45,8 @@ async function Detalle({ params }: { params: Promise<{ id: string }> }) {
         estado={p.estado}
         version={p.version}
         codigo={p.codigo}
+        referencias={referencias}
+        hoy={hoy()}
         inicial={{
           id: p.id,
           cliente_id: p.cliente_id,
@@ -69,6 +72,10 @@ async function Detalle({ params }: { params: Promise<{ id: string }> }) {
             dias: numONull(l.dias as string),
             markup: numONull(l.markup as string),
             markup_concepto: numONull(l.markup_concepto as string),
+            base: numONull(l.base as string),
+            altura: numONull(l.altura as string),
+            cotizacion_total: numONull(l.cotizacion_total as string),
+            markup_ref_presupuesto_id: (l.markup_ref_presupuesto_id as string | null) ?? null,
           })),
         }}
       />

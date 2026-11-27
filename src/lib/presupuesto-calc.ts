@@ -2,6 +2,7 @@
  * Cálculo de presupuestos, replicando el Excel "Presupuestos y Rentabilidad".
  *
  *   costo        = precio × cantidad × horas × días   (vacío = 1)
+ *                  o, en las líneas por medida (Trade), la cotización total del proveedor
  *   markup       = el de la línea › el del tramo (áreas con tramos, según el costo total) › el del concepto › el general
  *                  (multiplicador: 1.4 = +40 %)
  *   venta        = costo × markup
@@ -67,6 +68,8 @@ export type Linea = {
   dias: number | null;
   markup: number | null;
   markupConcepto: number | null;
+  /** Líneas por medida (Trade): el costo es la cotización total del proveedor. */
+  cotizacionTotal?: number | null;
   /** false = gasto no presupuestado: no suma costo ni venta, solo costo real. */
   presupuestada?: boolean;
   real?: Real;
@@ -77,7 +80,9 @@ const uno = (v: number | null | undefined) => (v == null ? 1 : v);
 const pct = (parte: number, total: number) => (total === 0 ? 0 : redondear((parte / total) * 100));
 
 export function costoLinea(l: Linea): number {
-  if (l.presupuestada === false || l.precioUnitario == null) return 0;
+  if (l.presupuestada === false) return 0;
+  if (l.cotizacionTotal != null) return redondear(l.cotizacionTotal);
+  if (l.precioUnitario == null) return 0;
   return redondear(l.precioUnitario * uno(l.cantidad) * uno(l.horas) * uno(l.dias));
 }
 
@@ -116,7 +121,15 @@ function sumar(rs: Resultado[]): Resultado {
   return { ...r, margenPct: pct(r.contribucion, r.venta) };
 }
 
-export type RubroInfo = { id: string; nombre: string; alertaSinCotizar: boolean; revisarSiSeUsa: boolean; areaId?: string | null };
+export type RubroInfo = {
+  id: string;
+  nombre: string;
+  alertaSinCotizar: boolean;
+  revisarSiSeUsa: boolean;
+  areaId?: string | null;
+  /** Rubro que se cotiza por medida (Trade): base × altura, piezas y cotización total. */
+  porMedida?: boolean;
+};
 
 export function alertaRubro(rubro: RubroInfo, r: Resultado, p: Parametros): string | null {
   if (rubro.alertaSinCotizar) return r.costo === 0 ? "Sin cotizar: confirmar si corresponde" : null;
@@ -144,7 +157,7 @@ export function resumenPresupuesto(lineas: Linea[], rubros: RubroInfo[], params:
 }
 
 /** Problemas que impiden aprobar (igual que el Excel). */
-export function erroresParaAprobar(lineas: (Linea & { concepto: string })[]): string[] {
+export function erroresParaAprobar(lineas: (Linea & { concepto: string; proveedor?: string | null; porMedida?: boolean })[]): string[] {
   const presup = lineas.filter((l) => l.presupuestada !== false);
   const errores: string[] = [];
   if (!presup.length) errores.push("El presupuesto no tiene líneas");
@@ -152,8 +165,10 @@ export function erroresParaAprobar(lineas: (Linea & { concepto: string })[]): st
   if (sinRubro) errores.push(`Hay ${sinRubro} línea(s) sin rubro`);
   const enCero = presup.filter((l) => l.cantidad === 0).map((l) => l.concepto);
   if (enCero.length) errores.push(`Líneas con cantidad 0 (completalas o borralas): ${enCero.join(", ")}`);
-  const sinPrecio = presup.filter((l) => l.precioUnitario == null).map((l) => l.concepto);
+  const sinPrecio = presup.filter((l) => l.precioUnitario == null && l.cotizacionTotal == null).map((l) => l.concepto);
   if (sinPrecio.length) errores.push(`Líneas sin precio: ${sinPrecio.join(", ")}`);
+  const sinProveedor = presup.filter((l) => l.porMedida && !l.proveedor?.trim()).map((l) => l.concepto);
+  if (sinProveedor.length) errores.push(`Líneas de Trade sin proveedor: ${sinProveedor.join(", ")}`);
   return errores;
 }
 
@@ -175,6 +190,8 @@ export function costoReal(l: Linea): number | null {
   if (!r) return null;
   if (r.monto != null) return r.monto;
   if (r.igual) return l.presupuestada === false ? null : costoLinea(l);
+  // Línea por medida: el "precio real" es la cotización total real.
+  if (l.cotizacionTotal != null) return r.precio;
   if (r.precio == null && r.cantidad == null && r.horas == null && r.dias == null) return null;
   return redondear(
     (r.precio ?? l.precioUnitario ?? 0) * uno(r.cantidad ?? l.cantidad) * uno(r.horas ?? l.horas) * uno(r.dias ?? l.dias),
@@ -233,6 +250,7 @@ export type FilaLinea = {
   dias: Num;
   markup: Num;
   markup_concepto: Num;
+  cotizacion_total?: Num;
   presupuestada: boolean;
   real_igual?: boolean;
   real_precio?: Num;
@@ -250,6 +268,7 @@ export const lineaDesdeFila = (f: FilaLinea): Linea => ({
   dias: numONull(f.dias),
   markup: numONull(f.markup),
   markupConcepto: numONull(f.markup_concepto),
+  cotizacionTotal: numONull(f.cotizacion_total),
   presupuestada: f.presupuestada,
   real: {
     igual: !!f.real_igual,
