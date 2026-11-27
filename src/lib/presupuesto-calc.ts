@@ -163,14 +163,34 @@ function sumar(rs: Resultado[]): Resultado {
   return { ...r, margenPct: pct(r.contribucion, r.venta) };
 }
 
+/**
+ * Cómo se cotiza un rubro:
+ *   estandar  precio × cantidad × horas × días (BTL y comunes)
+ *   medida    base × altura, piezas y costo (Trade)
+ *   periodo   costo por unidad por mes × cantidad × meses (Vía pública)
+ *   salidas   costo por salida × salidas (Plan de medios)
+ *   unidad    cantidad y costo unitario o total, con comparación por proveedor (Merchandising)
+ */
+export const MODOS_RUBRO = ["estandar", "medida", "periodo", "salidas", "unidad"] as const;
+export type ModoRubro = (typeof MODOS_RUBRO)[number];
+export const ETIQUETA_MODO: Record<ModoRubro, string> = {
+  estandar: "Precio × cant. × horas × días",
+  medida: "Por medida (base × altura)",
+  periodo: "Por mes (cant. × meses)",
+  salidas: "Por salidas",
+  unidad: "Por unidad (costo unit. o total)",
+};
+
 export type RubroInfo = {
   id: string;
   nombre: string;
   alertaSinCotizar: boolean;
   revisarSiSeUsa: boolean;
   areaId?: string | null;
-  /** Rubro que se cotiza por medida (Trade): base × altura, piezas y cotización total. */
+  /** Rubro que se cotiza por cotización del proveedor (Trade por medida, Merchandising por unidad). */
   porMedida?: boolean;
+  /** Cómo se cotiza el rubro (columnas del editor). */
+  modo?: ModoRubro;
 };
 
 export function alertaRubro(rubro: RubroInfo, r: Resultado, p: Parametros): string | null {

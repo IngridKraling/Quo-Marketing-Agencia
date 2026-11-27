@@ -39,7 +39,7 @@ const LinkPpto = ({ id, codigo }: { id: string; codigo: string | null }) => (
 /** Frases de comparación debajo de una línea: costo vs. otras cotizaciones y qué pasa con el precio al cliente. */
 function Comparaciones({ l, c, markup, params }: { l: LineaInput; c: Comparacion; markup: number; params: Parametros }) {
   const frases: { tono: "info" | "ok" | "alerta"; texto: ReactNode }[] = [];
-  const unidad = c.unitario?.por === "pieza" ? "por pieza" : "por m²";
+  const unidad = c.unitario?.por === "pieza" ? "por unidad" : "por m²";
 
   // 0) Sin proveedor no se puede aprobar ni comparar con sus cotizaciones anteriores.
   if (!l.proveedor) {
@@ -127,7 +127,7 @@ function Comparaciones({ l, c, markup, params }: { l: LineaInput; c: Comparacion
   const color = { info: "bg-zinc-100 text-zinc-700", ok: "bg-emerald-50 text-emerald-900", alerta: "bg-amber-50 text-amber-900" };
   return (
     <tr>
-      <td colSpan={15} className="px-2 pb-3 pt-0 pl-8">
+      <td colSpan={20} className="px-2 pb-3 pt-0 pl-8">
         <ul className="sticky left-0 flex w-fit max-w-[min(100%,900px)] flex-col gap-1 text-xs">
           {frases.map((f, i) => (
             <li key={i} className={`rounded px-2 py-1 ${color[f.tono]}`}>{f.texto}</li>
@@ -155,6 +155,7 @@ export function TablaMedidas({
   cambiarConcepto,
   filaDnd,
   arrastre,
+  conMedidas = true,
 }: {
   lineas: LineaInput[];
   calc: (Resultado & { markup: number })[];
@@ -170,6 +171,8 @@ export function TablaMedidas({
   /** Props de arrastre de cada fila y el arrastre del editor (para la manija). */
   filaDnd: (id: string) => Record<string, unknown> & { className: string };
   arrastre?: Arrastre;
+  /** false = por unidad (Merchandising): sin base, altura, m² ni costo por m². */
+  conMedidas?: boolean;
 }) {
   // Se puede cargar el costo unitario o el total: se guarda el total. Si se cargó por unidad, al cambiar las
   // piezas se mantiene el unitario (y se recalcula el total); si se cargó el total, se mantiene el total.
@@ -191,20 +194,20 @@ export function TablaMedidas({
   }
 
   return (
-    <table className="w-full min-w-[1500px]">
+    <table className={`w-full ${conMedidas ? "min-w-[1500px]" : "min-w-[1150px]"}`}>
       <thead>
         <tr>
           <th className="w-6" />
           <th className="th">Concepto</th>
           <th className="th">Observaciones</th>
           <th className="th w-40">Proveedor</th>
-          <th className="th w-20">Base (m)</th>
-          <th className="th w-20">Altura (m)</th>
-          <th className="th w-16">Piezas</th>
-          <th className="th w-16 text-right">m²</th>
+          {conMedidas && <th className="th w-20">Base (m)</th>}
+          {conMedidas && <th className="th w-20">Altura (m)</th>}
+          <th className="th w-16">{conMedidas ? "Piezas" : "Cantidad"}</th>
+          {conMedidas && <th className="th w-16 text-right">m²</th>}
           <th className="th w-32">Costo unitario</th>
           <th className="th w-32">Costo total</th>
-          <th className="th w-28 text-right">Costo por m²</th>
+          {conMedidas && <th className="th w-28 text-right">Costo por m²</th>}
           <th className="th w-20">Markup</th>
           <th className="th w-28 text-right">Venta unitaria</th>
           <th className="th w-28 text-right">Venta total</th>
@@ -241,15 +244,17 @@ export function TablaMedidas({
                     )}
                   </select>
                 </td>
-                <td className="td"><CampoNumero valor={l.base ?? null} etiqueta="Base (m)" placeholder="—" className="input min-w-16" onCambio={(v) => setLinea(l.id, { base: v || null })} /></td>
-                <td className="td"><CampoNumero valor={l.altura ?? null} etiqueta="Altura (m)" placeholder="—" className="input min-w-16" onCambio={(v) => setLinea(l.id, { altura: v || null })} /></td>
+                {conMedidas && <td className="td"><CampoNumero valor={l.base ?? null} etiqueta="Base (m)" placeholder="—" className="input min-w-16" onCambio={(v) => setLinea(l.id, { base: v || null })} /></td>}
+                {conMedidas && <td className="td"><CampoNumero valor={l.altura ?? null} etiqueta="Altura (m)" placeholder="—" className="input min-w-16" onCambio={(v) => setLinea(l.id, { altura: v || null })} /></td>}
                 <td className="td"><CampoNumero valor={l.cantidad} etiqueta="Piezas" className="input min-w-14" onCambio={(v) => cambiarPiezas(l, v)} /></td>
-                <td className="td text-right tabular-nums">{m2 ? decimal(m2) : "—"}</td>
-                <td className="td"><CampoPesos valor={unitario(l)} etiqueta="Costo unitario" placeholder="Por pieza" className="input min-w-32" onCambio={(v) => cambiarUnitario(l, v)} /></td>
+                {conMedidas && <td className="td text-right tabular-nums">{m2 ? decimal(m2) : "—"}</td>}
+                <td className="td"><CampoPesos valor={unitario(l)} etiqueta="Costo unitario" placeholder={conMedidas ? "Por pieza" : "Por unidad"} className="input min-w-32" onCambio={(v) => cambiarUnitario(l, v)} /></td>
                 <td className="td"><CampoPesos valor={l.cotizacion_total ?? null} etiqueta="Cotización total" placeholder="A cotizar" className="input min-w-32" onCambio={(v) => cambiarTotal(l, v)} /></td>
-                <td className="td whitespace-nowrap text-right font-semibold tabular-nums">
-                  {c.unitario ? <>{pesos(c.unitario.valor)}{c.unitario.por === "pieza" && <span className="block text-xs font-normal text-zinc-500">por pieza (sin medidas)</span>}</> : "—"}
-                </td>
+                {conMedidas && (
+                  <td className="td whitespace-nowrap text-right font-semibold tabular-nums">
+                    {c.unitario ? <>{pesos(c.unitario.valor)}{c.unitario.por === "pieza" && <span className="block text-xs font-normal text-zinc-500">por unidad (sin medidas)</span>}</> : "—"}
+                  </td>
+                )}
                 <td className="td">
                   <CampoNumero
                     valor={l.markup}
