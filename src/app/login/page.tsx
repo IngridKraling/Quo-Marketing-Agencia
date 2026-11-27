@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -22,7 +23,8 @@ export default function Login() {
   return (
     <main className="flex min-h-screen items-center justify-center px-4">
       <form onSubmit={enviar} className="card w-full max-w-sm space-y-3">
-        <h1 className="text-lg font-semibold">Ingresar</h1>
+        <Image src="/logo-quo.png" alt="quo·marketing" width={200} height={31} priority className="mb-2" />
+        <h1 className="text-lg font-semibold">Ingresar a Presupuestos</h1>
         <input className="input" type="email" required placeholder="tu@email.com" value={email} onChange={(e) => setEmail(e.target.value)} />
         <button className="btn w-full" disabled={estado === "enviando"}>Enviarme un link</button>
         {estado === "enviado" && <p className="text-sm text-green-700">Revisá tu mail y abrí el link.</p>}

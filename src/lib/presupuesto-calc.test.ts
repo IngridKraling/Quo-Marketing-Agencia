@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   calcularLinea,
   conTramo,
+  estadoComercial,
   markupDeTramo,
+  opcionesComerciales,
   controlProyecto,
   costoReal,
   erroresParaAprobar,
@@ -187,5 +189,16 @@ describe("markup por tramo (Trade)", () => {
     expect(r.markupTramo).toBeNull();
     expect(r.venta).toBe(840000);
     expect(conTramo([linea(1)], P).markupTramo).toBeNull();
+  });
+});
+
+describe("estado en dos partes", () => {
+  it("lo aprobado y sus etapas se ven como Aprobado en la columna Estado", () => {
+    expect(["aprobado", "en_ejecucion", "finalizado", "facturado"].map((e) => estadoComercial(e as never))).toEqual(["aprobado", "aprobado", "aprobado", "aprobado"]);
+    expect(estadoComercial("enviado")).toBe("enviado");
+  });
+  it("una vez aprobado, el Estado solo se puede cancelar", () => {
+    expect(opcionesComerciales("en_ejecucion")).toEqual(["aprobado", "cancelado"]);
+    expect(opcionesComerciales("borrador")).toEqual(["borrador", "enviado", "aprobado", "rechazado", "cancelado"]);
   });
 });

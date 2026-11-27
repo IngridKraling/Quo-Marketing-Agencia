@@ -19,13 +19,20 @@ export default function Page() {
   );
 }
 
+/** Pendiente / en parte / facturado según cuántas filas de Facturación tienen FC N°. Sin filas (no aprobado): null. */
+function estadoFacturacion(filas: { fc_numero: string | null }[]): FilaPresupuesto["facturacion"] {
+  if (!filas.length) return null;
+  const con = filas.filter((f) => !!f.fc_numero?.trim()).length;
+  return con === filas.length ? "facturado" : con ? "parcial" : "pendiente";
+}
+
 async function Listado() {
   const supabase = await createClient();
   const [{ data, error }, params, listaTramos] = await Promise.all([
     supabase
       .from("presupuestos")
       .select(
-        "id, codigo, titulo, marca, responsable, estado, version, area_id, fecha_elaboracion, fecha_evento, clientes(nombre), areas(nombre), presupuesto_lineas(*)",
+        "id, codigo, titulo, marca, responsable, estado, version, area_id, fecha_elaboracion, fecha_evento, clientes(nombre), areas(nombre), presupuesto_lineas(*), presupuesto_facturas(fc_numero)",
       )
       .order("created_at", { ascending: false }),
     parametros(),
@@ -55,6 +62,7 @@ async function Listado() {
       venta: r.venta,
       margenPct: r.venta ? r.margenPct : null,
       costoReal: reales.length ? reales.reduce((s, x) => s + x, 0) : null,
+      facturacion: estadoFacturacion((p.presupuesto_facturas as { fc_numero: string | null }[] | null) ?? []),
     };
   });
 

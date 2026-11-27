@@ -171,6 +171,16 @@ export async function aprobarPresupuesto(id: string): Promise<Resultado> {
   if (v.error) return error(v.error.message);
   const u = await supabase.from("presupuestos").update({ estado: "aprobado", aprobado_at: ahora }).eq("id", id);
   if (u.error) return error(u.error.message);
+
+  // Pasa a Facturación: una fila con el importe neto. Si ya había (nueva versión) y todavía no se facturó
+  // ni se dividió, se actualiza el importe.
+  const { data: filas_fc } = await supabase.from("presupuesto_facturas").select("id, fc_numero").eq("presupuesto_id", id);
+  if (!filas_fc?.length) {
+    await supabase.from("presupuesto_facturas").insert({ presupuesto_id: id, importe_neto: resumen.venta });
+  } else if (filas_fc.length === 1 && !filas_fc[0].fc_numero) {
+    await supabase.from("presupuesto_facturas").update({ importe_neto: resumen.venta }).eq("id", filas_fc[0].id);
+  }
+  revalidatePath("/facturacion");
   revalidatePath("/presupuestos");
   revalidatePath(`/presupuestos/${id}`);
   return { ok: true, mensaje: `Versión ${p.version} aprobada y congelada` };
@@ -191,11 +201,12 @@ export async function crearNuevaVersion(id: string): Promise<Resultado> {
 /** Cambios de estado que no son aprobar ni crear versión. */
 export async function cambiarEstado(id: string, estado: Estado): Promise<Resultado> {
   if (!ESTADOS.includes(estado)) return error("Estado inválido");
-  if (estado === "aprobado") return error("Para aprobar usá el botón Aprobar y congelar");
   const supabase = await db();
   const { data: p } = await supabase.from("presupuestos").select("estado").eq("id", id).single();
   if (!p) return error("Presupuesto no encontrado");
   const congelado = estaCongelado(p.estado);
+  // Volver a "Aprobado · Sin empezar" desde una etapa de ejecución está bien; aprobar uno sin aprobar, no (hay que validar).
+  if (estado === "aprobado" && !congelado) return error("Para aprobar usá Aprobar y congelar (valida el presupuesto)");
   if (congelado && (estado === "borrador" || estado === "enviado")) return error("Para volver a editar, creá una nueva versión");
   if (!congelado && (estado === "en_ejecucion" || estado === "finalizado" || estado === "facturado")) {
     return error("Primero hay que aprobar el presupuesto");
@@ -205,6 +216,94 @@ export async function cambiarEstado(id: string, estado: Estado): Promise<Resulta
   revalidatePath("/presupuestos");
   revalidatePath(`/presupuestos/${id}`);
   return { ok: true, mensaje: "Estado actualizado" };
+}
+
+/* ======================= Facturación ======================= */
+
+/**
+ * Ejecución automática: si todas las filas de facturación del presupuesto tienen FC N°, pasa a "Facturado";
+ * si estaba en "Facturado" y ya no, vuelve a "Finalizado".
+ */
+async function sincronizarFacturado(supabase: Awaited<ReturnType<typeof db>>, presupuestoId: string) {
+  const [{ data: p }, { data: filas }] = await Promise.all([
+    supabase.from("presupuestos").select("estado").eq("id", presupuestoId).single(),
+    supabase.from("presupuesto_facturas").select("fc_numero").eq("presupuesto_id", presupuestoId),
+  ]);
+  if (!p || !estaCongelado(p.estado) || !filas?.length) return;
+  const todas = filas.every((f) => !!f.fc_numero?.trim());
+  if (todas && p.estado !== "facturado") await supabase.from("presupuestos").update({ estado: "facturado" }).eq("id", presupuestoId);
+  if (!todas && p.estado === "facturado") await supabase.from("presupuestos").update({ estado: "finalizado" }).eq("id", presupuestoId);
+}
+
+const facturaSchema = z.object({
+  importe_neto: num.min(0, "El importe no puede ser negativo"),
+  periodo: z.preprocess((v) => (v === "" || v == null ? null : v), z.string().regex(/^\d{4}-\d{2}$/).nullable()),
+  oc_numero: textoOpc,
+  fc_numero: textoOpc,
+  fc_enviada: z.boolean(),
+  pagada: z.boolean(),
+  comentarios: textoOpc,
+});
+export type FacturaInput = z.infer<typeof facturaSchema>;
+
+/** Guarda una fila de Facturación (se llama al salir de cada campo). */
+export async function guardarFacturaPresupuesto(id: string, datos: FacturaInput): Promise<Resultado> {
+  const parsed = facturaSchema.safeParse(datos);
+  if (!parsed.success) return error(parsed.error.issues[0]?.message ?? "Revisá los datos");
+  const { periodo, ...resto } = parsed.data;
+  const supabase = await db();
+  const { data, error: e } = await supabase
+    .from("presupuesto_facturas")
+    .update({ ...resto, periodo: periodo ? `${periodo}-01` : null })
+    .eq("id", id)
+    .select("presupuesto_id")
+    .single();
+  if (e) return error(e.message);
+  await sincronizarFacturado(supabase, data.presupuesto_id);
+  revalidatePath("/facturacion");
+  revalidatePath("/presupuestos");
+  return { ok: true, mensaje: "Guardado" };
+}
+
+/** Divide una fila en dos (OC en partes): la nueva arranca con la mitad del importe de la original. */
+export async function dividirFacturaPresupuesto(id: string): Promise<Resultado> {
+  const supabase = await db();
+  const { data: f } = await supabase.from("presupuesto_facturas").select("presupuesto_id, importe_neto, orden").eq("id", id).single();
+  if (!f) return error("Fila no encontrada");
+  const total = Number(f.importe_neto);
+  const mitad = Math.round((total / 2) * 100) / 100;
+  const u = await supabase.from("presupuesto_facturas").update({ importe_neto: total - mitad }).eq("id", id);
+  if (u.error) return error(u.error.message);
+  const ins = await supabase.from("presupuesto_facturas").insert({ presupuesto_id: f.presupuesto_id, importe_neto: mitad, orden: (f.orden ?? 0) + 1 });
+  if (ins.error) return error(ins.error.message);
+  await sincronizarFacturado(supabase, f.presupuesto_id);
+  revalidatePath("/facturacion");
+  revalidatePath("/presupuestos");
+  return { ok: true, mensaje: "Dividido en dos partes: ajustá los importes" };
+}
+
+/** Quita una parte; su importe se suma a otra parte del mismo presupuesto (siempre queda al menos una). */
+export async function quitarParteFacturaPresupuesto(id: string): Promise<Resultado> {
+  const supabase = await db();
+  const { data: f } = await supabase.from("presupuesto_facturas").select("presupuesto_id, importe_neto, fc_numero").eq("id", id).single();
+  if (!f) return error("Fila no encontrada");
+  if (f.fc_numero) return error("Esta parte ya tiene FC N°: borralo primero si querés quitarla");
+  const { data: otras } = await supabase
+    .from("presupuesto_facturas")
+    .select("id, importe_neto")
+    .eq("presupuesto_id", f.presupuesto_id)
+    .neq("id", id)
+    .order("orden");
+  if (!otras?.length) return error("Es la única fila del presupuesto");
+  const destino = otras[0];
+  const u = await supabase.from("presupuesto_facturas").update({ importe_neto: Number(destino.importe_neto) + Number(f.importe_neto) }).eq("id", destino.id);
+  if (u.error) return error(u.error.message);
+  const d = await supabase.from("presupuesto_facturas").delete().eq("id", id);
+  if (d.error) return error(d.error.message);
+  await sincronizarFacturado(supabase, f.presupuesto_id);
+  revalidatePath("/facturacion");
+  revalidatePath("/presupuestos");
+  return { ok: true, mensaje: "Parte quitada" };
 }
 
 /* ======================= Costos reales ======================= */

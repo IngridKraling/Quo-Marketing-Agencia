@@ -30,6 +30,48 @@ export const ETIQUETA_ESTADO: Record<Estado, string> = {
 /** Estados en los que el presupuesto quedó congelado (solo se cargan costos reales). */
 export const estaCongelado = (e: Estado) => e === "aprobado" || e === "en_ejecucion" || e === "finalizado" || e === "facturado";
 
+
+/*
+ * El estado se muestra en dos partes:
+ *   · Estado (comercial): Borrador, Enviado, Aprobado, Rechazado, Cancelado.
+ *   · Ejecución (solo si está aprobado): Sin empezar, En ejecución, Finalizado, Facturado.
+ * En la base sigue siendo un solo campo: aprobado = "Aprobado · Sin empezar".
+ */
+export const ESTADOS_COMERCIALES = ["borrador", "enviado", "aprobado", "rechazado", "cancelado"] as const;
+export type EstadoComercial = (typeof ESTADOS_COMERCIALES)[number];
+export const ETAPAS_EJECUCION = ["aprobado", "en_ejecucion", "finalizado", "facturado"] as const satisfies readonly Estado[];
+export const ETIQUETA_EJECUCION: Record<(typeof ETAPAS_EJECUCION)[number], string> = {
+  aprobado: "Sin empezar",
+  en_ejecucion: "En ejecución",
+  finalizado: "Finalizado",
+  facturado: "Facturado",
+};
+export const estadoComercial = (e: Estado): EstadoComercial => (estaCongelado(e) ? "aprobado" : (e as EstadoComercial));
+
+/** Opciones del desplegable "Estado" (comercial). Una vez aprobado solo se puede cancelar. */
+export const opcionesComerciales = (actual: Estado): EstadoComercial[] =>
+  estaCongelado(actual) ? ["aprobado", "cancelado"] : [...ESTADOS_COMERCIALES];
+
+/** Color de cada estado: verde = aprobado; rojo = rechazado/cancelado; ámbar = pendiente (borrador/enviado). */
+export const COLOR_ESTADO: Record<Estado, string> = {
+  borrador: "bg-amber-50 text-amber-800 border-amber-200",
+  enviado: "bg-amber-100 text-amber-900 border-amber-300",
+  aprobado: "bg-green-100 text-green-800 border-green-300",
+  en_ejecucion: "bg-blue-100 text-blue-800 border-blue-300",
+  finalizado: "bg-indigo-100 text-indigo-800 border-indigo-300",
+  facturado: "bg-green-100 text-green-800 border-green-300",
+  rechazado: "bg-red-100 text-red-800 border-red-300",
+  cancelado: "bg-red-100 text-red-800 border-red-300",
+};
+
+/** Color de la etapa de ejecución (una vez aprobado). */
+export const COLOR_EJECUCION: Record<(typeof ETAPAS_EJECUCION)[number], string> = {
+  aprobado: "bg-white text-zinc-700 border-zinc-300",
+  en_ejecucion: "bg-blue-100 text-blue-800 border-blue-300",
+  finalizado: "bg-indigo-100 text-indigo-800 border-indigo-300",
+  facturado: "bg-green-100 text-green-800 border-green-300",
+};
+
 export type Parametros = {
   markupDefault: number;
   /** Suma de los impuestos s/venta activos, en %. */

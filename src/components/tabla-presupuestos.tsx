@@ -1,9 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ESTADOS, ETIQUETA_ESTADO, type Estado } from "@/lib/presupuesto-calc";
+import { aprobarPresupuesto, cambiarEstado } from "@/app/actions";
+import {
+  COLOR_EJECUCION,
+  COLOR_ESTADO,
+  ESTADOS_COMERCIALES,
+  ETAPAS_EJECUCION,
+  ETIQUETA_EJECUCION,
+  ETIQUETA_ESTADO,
+  estaCongelado,
+  estadoComercial,
+  opcionesComerciales,
+  type Estado,
+} from "@/lib/presupuesto-calc";
 import { fecha, pesos, porcentaje } from "@/lib/formato";
 import { alfabetico } from "@/lib/opciones";
 
@@ -23,20 +35,14 @@ export type FilaPresupuesto = {
   venta: number;
   margenPct: number | null;
   costoReal: number | null;
+  /** Según Facturación: null si no está aprobado. */
+  facturacion: "pendiente" | "parcial" | "facturado" | null;
 };
 
-const COLOR: Partial<Record<Estado, string>> = {
-  aprobado: "bg-green-100 text-green-800",
-  en_ejecucion: "bg-blue-100 text-blue-800",
-  finalizado: "bg-indigo-100 text-indigo-800",
-  facturado: "bg-zinc-800 text-white",
-  rechazado: "bg-red-100 text-red-800",
-  cancelado: "bg-red-100 text-red-800",
-};
 
 type Columna =
   | "codigo" | "cliente" | "titulo" | "responsable" | "area" | "fechaElaboracion" | "fechaEvento"
-  | "estado" | "costo" | "venta" | "margenPct" | "costoReal";
+  | "estado" | "ejecucion" | "costo" | "venta" | "margenPct" | "costoReal";
 
 const COLUMNAS: { col: Columna; titulo: string; numero?: boolean }[] = [
   { col: "codigo", titulo: "ID" },
@@ -47,6 +53,7 @@ const COLUMNAS: { col: Columna; titulo: string; numero?: boolean }[] = [
   { col: "fechaElaboracion", titulo: "Elaboración" },
   { col: "fechaEvento", titulo: "Evento" },
   { col: "estado", titulo: "Estado" },
+  { col: "ejecucion", titulo: "Ejecución" },
   { col: "costo", titulo: "Costo", numero: true },
   { col: "venta", titulo: "Venta", numero: true },
   { col: "margenPct", titulo: "Margen", numero: true },
@@ -56,7 +63,8 @@ const COLUMNAS: { col: Columna; titulo: string; numero?: boolean }[] = [
 /** Valor con el que se ordena cada columna (null = sin dato, va siempre al final). */
 function valorOrden(f: FilaPresupuesto, col: Columna): string | number | null {
   switch (col) {
-    case "estado": return ESTADOS.indexOf(f.estado);
+    case "estado": return ESTADOS_COMERCIALES.indexOf(estadoComercial(f.estado));
+    case "ejecucion": return estaCongelado(f.estado) ? ETAPAS_EJECUCION.indexOf(f.estado as (typeof ETAPAS_EJECUCION)[number]) : null;
     default: return f[col];
   }
 }
@@ -67,6 +75,7 @@ const FILTROS_VACIOS = {
   marca: "",
   area: "",
   estado: "",
+  ejecucion: "",
   responsable: "",
   elaboracionDesde: "",
   elaboracionHasta: "",
@@ -83,6 +92,26 @@ const enRango = (valor: string | null, desde: string, hasta: string) =>
 export function TablaPresupuestos({ filas }: { filas: FilaPresupuesto[] }) {
   const router = useRouter();
   const [f, setF] = useState<Filtros>(FILTROS_VACIOS);
+  // Estado cambiado desde la lista: se muestra al instante mientras se guarda.
+  const [estados, setEstados] = useState<Record<string, Estado>>({});
+  const [aviso, setAviso] = useState<{ ok: boolean; texto: string } | null>(null);
+  const [guardando, startTransition] = useTransition();
+
+  function cambiar(p: FilaPresupuesto, nuevo: Estado) {
+    const anterior = estados[p.id] ?? p.estado;
+    setEstados((e) => ({ ...e, [p.id]: nuevo }));
+    startTransition(async () => {
+      // Aprobar uno sin aprobar valida y congela (igual que el botón del editor).
+      const r = nuevo === "aprobado" && !estaCongelado(anterior) ? await aprobarPresupuesto(p.id) : await cambiarEstado(p.id, nuevo);
+      if (r?.ok) {
+        setAviso({ ok: true, texto: `${p.codigo ?? p.titulo}: ${ETIQUETA_ESTADO[nuevo]}` });
+        router.refresh();
+      } else {
+        setEstados((e) => ({ ...e, [p.id]: anterior }));
+        setAviso({ ok: false, texto: `${p.codigo ?? p.titulo}: ${r?.mensaje ?? "no se pudo cambiar el estado"}` });
+      }
+    });
+  }
   const [orden, setOrden] = useState<{ col: Columna; asc: boolean } | null>(null);
   const set = (k: keyof Filtros, v: string) => setF((prev) => ({ ...prev, [k]: v, ...(k === "cliente" ? { marca: "" } : {}) }));
 
@@ -93,7 +122,8 @@ export function TablaPresupuestos({ filas }: { filas: FilaPresupuesto[] }) {
       marca: unicos(filas.filter((x) => !f.cliente || x.cliente === f.cliente).map((x) => x.marca)),
       area: unicos(filas.map((x) => x.area)),
       responsable: unicos(filas.map((x) => x.responsable)),
-      estado: ESTADOS.filter((e) => filas.some((x) => x.estado === e)),
+      estado: ESTADOS_COMERCIALES.filter((e) => filas.some((x) => estadoComercial(x.estado) === e)),
+      ejecucion: ETAPAS_EJECUCION.filter((e) => filas.some((x) => x.estado === e)),
     }),
     [filas, f.cliente],
   );
@@ -106,7 +136,8 @@ export function TablaPresupuestos({ filas }: { filas: FilaPresupuesto[] }) {
         (!f.cliente || x.cliente === f.cliente) &&
         (!f.marca || x.marca === f.marca) &&
         (!f.area || x.area === f.area) &&
-        (!f.estado || x.estado === f.estado) &&
+        (!f.estado || estadoComercial(x.estado) === f.estado) &&
+        (!f.ejecucion || x.estado === f.ejecucion) &&
         (!f.responsable || x.responsable === f.responsable) &&
         enRango(x.fechaElaboracion, f.elaboracionDesde, f.elaboracionHasta) &&
         enRango(x.fechaEvento, f.eventoDesde, f.eventoHasta),
@@ -168,19 +199,25 @@ export function TablaPresupuestos({ filas }: { filas: FilaPresupuesto[] }) {
         {desplegable("marca", "Marca", opciones.marca)}
         {desplegable("area", "Área", opciones.area)}
         {desplegable("estado", "Estado", opciones.estado, (e) => ETIQUETA_ESTADO[e as Estado])}
+        {desplegable("ejecucion", "Ejecución", opciones.ejecucion, (e) => ETIQUETA_EJECUCION[e as (typeof ETAPAS_EJECUCION)[number]])}
         {desplegable("responsable", "Responsable", opciones.responsable)}
         {rango("Elaboración", "elaboracionDesde", "elaboracionHasta")}
         {rango("Evento", "eventoDesde", "eventoHasta")}
         {hayFiltros && <button type="button" className="btn-sec" onClick={() => setF(FILTROS_VACIOS)}>Limpiar filtros</button>}
       </div>
 
+      {aviso && (
+        <p className={`rounded-md px-3 py-2 text-sm ${aviso.ok ? "bg-green-50 text-green-800" : "bg-red-50 text-red-800"}`} role="status">
+          {aviso.texto}
+        </p>
+      )}
       <p className="text-sm text-zinc-500">
         {visibles.length === filas.length ? `${filas.length} presupuestos` : `${visibles.length} de ${filas.length} presupuestos`}
         {" · "}Clic en el título de una columna para ordenar.
       </p>
 
       <div className="card overflow-x-auto p-0">
-        <table className="w-full min-w-[1150px]">
+        <table className="w-full min-w-[1250px]">
           <thead>
             <tr>
               {COLUMNAS.map(({ col, titulo, numero }) => (
@@ -203,10 +240,51 @@ export function TablaPresupuestos({ filas }: { filas: FilaPresupuesto[] }) {
                 <td className="td">{p.area ?? "—"}</td>
                 <td className="td whitespace-nowrap">{fecha(p.fechaElaboracion)}</td>
                 <td className="td whitespace-nowrap">{fecha(p.fechaEvento)}</td>
-                <td className="td whitespace-nowrap">
-                  <span className={`rounded px-2 py-0.5 text-xs ${COLOR[p.estado] ?? "bg-zinc-100"}`}>{ETIQUETA_ESTADO[p.estado]}</span>
-                  {p.version > 1 && <span className="ml-1 text-xs text-zinc-500">v{p.version}</span>}
-                </td>
+                {(() => {
+                  const actual = estados[p.id] ?? p.estado;
+                  const comercial = estadoComercial(actual);
+                  const aprobado = estaCongelado(actual);
+                  const clase = "cursor-pointer rounded-md border px-2 py-1 text-xs font-medium";
+                  return (
+                    <>
+                      <td className="td whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                        <select
+                          className={`${clase} ${COLOR_ESTADO[comercial]}`}
+                          value={comercial}
+                          disabled={guardando}
+                          aria-label={`Estado de ${p.codigo ?? p.titulo}`}
+                          onChange={(e) => e.target.value !== comercial && cambiar(p, e.target.value as Estado)}
+                        >
+                          {opcionesComerciales(actual).map((e) => <option key={e} value={e} className="bg-white text-zinc-900">{ETIQUETA_ESTADO[e]}</option>)}
+                        </select>
+                        {p.version > 1 && <span className="ml-1 text-xs text-zinc-500">v{p.version}</span>}
+                      </td>
+                      <td className="td whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                        {aprobado ? (
+                          <select
+                            className={`${clase} ${COLOR_EJECUCION[actual as (typeof ETAPAS_EJECUCION)[number]]}`}
+                            value={actual}
+                            disabled={guardando}
+                            aria-label={`Ejecución de ${p.codigo ?? p.titulo}`}
+                            onChange={(e) => cambiar(p, e.target.value as Estado)}
+                          >
+                            {ETAPAS_EJECUCION.map((e) => <option key={e} value={e} className="bg-white text-zinc-900">{ETIQUETA_EJECUCION[e]}</option>)}
+                          </select>
+                        ) : null}
+                        {p.facturacion && p.facturacion !== "facturado" && (
+                          <Link
+                            href="/facturacion"
+                            onClick={(e) => e.stopPropagation()}
+                            className="mt-1 block w-fit rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800 hover:underline"
+                          >
+                            {p.facturacion === "parcial" ? "Facturado en parte" : "Pendiente de facturar"}
+                          </Link>
+                        )}
+                        {!aprobado && <span className="text-xs text-zinc-400" title="Se completa cuando el presupuesto está aprobado">—</span>}
+                      </td>
+                    </>
+                  );
+                })()}
                 <td className="td text-right tabular-nums">{pesos(p.costo)}</td>
                 <td className="td text-right tabular-nums">{pesos(p.venta)}</td>
                 <td className="td text-right tabular-nums">{p.margenPct == null ? "—" : porcentaje(p.margenPct)}</td>
@@ -226,7 +304,7 @@ export function TablaPresupuestos({ filas }: { filas: FilaPresupuesto[] }) {
           {visibles.length > 1 && (
             <tfoot>
               <tr className="border-t border-zinc-200 font-semibold">
-                <td className="td" colSpan={8}>Total de lo que se ve</td>
+                <td className="td" colSpan={9}>Total de lo que se ve</td>
                 <td className="td text-right tabular-nums">{pesos(totalCosto)}</td>
                 <td className="td text-right tabular-nums">{pesos(totalVenta)}</td>
                 <td className="td" colSpan={2} />
