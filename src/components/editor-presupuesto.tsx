@@ -25,7 +25,6 @@ import {
   paramsDeArea,
   resumenPresupuesto,
   type Estado,
-  type Origen,
 } from "@/lib/presupuesto-calc";
 import type { Catalogo } from "@/lib/servicios/datos";
 import { conceptosParaArea, opcionesMarca as marcasDelCliente, proveedoresParaRubro, rubrosParaArea } from "@/lib/opciones";
@@ -37,11 +36,6 @@ import { comparar, type Comparacion, type Referencia } from "@/lib/medidas";
 import { TablaMedidas, medidaDe } from "@/components/lineas-medida";
 import { AccionesLinea, useArrastre, type Arrastre } from "@/components/flechas-linea";
 
-const ORIGENES: { valor: Origen; etiqueta: string }[] = [
-  { valor: "proveedor", etiqueta: "Proveedor" },
-  { valor: "propio", etiqueta: "Propio" },
-  { valor: "personal", etiqueta: "Personal" },
-];
 const UNIDADES = ["Hora", "Unidad", "Día", "Jornada", "Servicio"];
 
 const lineaVacia = (rubroId: string | null): LineaInput => ({
@@ -518,13 +512,12 @@ function SeccionRubro({
               {...{ setLinea, quitar, cambiarConcepto }}
             />
           ) : (
-          <table className="w-full min-w-[1400px]">
+          <table className="w-full min-w-[1280px]">
             <thead>
               <tr>
                 <th className="w-6" />
                 <th className="th">Concepto</th>
                 <th className="th">Observaciones</th>
-                <th className="th w-28">Origen</th>
                 <th className="th w-36">Proveedor</th>
                 <th className="th w-24">Unidad</th>
                 <th className="th w-28">Precio unit.</th>
@@ -550,11 +543,6 @@ function SeccionRubro({
                       <input className="input min-w-44" list={listaId} value={l.concepto} aria-label="Concepto" placeholder="Elegí o escribí" onChange={(e) => cambiarConcepto(l, e.target.value)} />
                     </td>
                     <td className="td"><input className="input min-w-32" value={l.observaciones ?? ""} aria-label="Observaciones" onChange={(e) => setLinea(l.id, { observaciones: e.target.value })} /></td>
-                    <td className="td">
-                      <select className="input min-w-28" value={l.origen} aria-label="Origen" onChange={(e) => setLinea(l.id, { origen: e.target.value as Origen })}>
-                        {ORIGENES.map((o) => <option key={o.valor} value={o.valor}>{o.etiqueta}</option>)}
-                      </select>
-                    </td>
                     <td className="td"><input className="input min-w-32" list={listaProveedoresId} value={l.proveedor ?? ""} aria-label="Proveedor" onChange={(e) => setLinea(l.id, { proveedor: e.target.value })} /></td>
                     <td className="td"><input className="input min-w-24" list="lista-unidades" value={l.unidad ?? ""} aria-label="Unidad" onChange={(e) => setLinea(l.id, usaHoras(e.target.value) ? { unidad: e.target.value } : { unidad: e.target.value, horas: null })} /></td>
                     <td className="td"><CampoPesos valor={l.precio_unitario} etiqueta="Precio unitario" className="input min-w-32" onCambio={(v) => setLinea(l.id, { precio_unitario: v })} /></td>
