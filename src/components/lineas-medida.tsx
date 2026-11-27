@@ -127,7 +127,7 @@ function Comparaciones({ l, c, markup, params }: { l: LineaInput; c: Comparacion
   const color = { info: "bg-zinc-100 text-zinc-700", ok: "bg-emerald-50 text-emerald-900", alerta: "bg-amber-50 text-amber-900" };
   return (
     <tr>
-      <td colSpan={14} className="px-2 pb-3 pt-0 pl-8">
+      <td colSpan={15} className="px-2 pb-3 pt-0 pl-8">
         <ul className="sticky left-0 flex w-fit max-w-[min(100%,900px)] flex-col gap-1 text-xs">
           {frases.map((f, i) => (
             <li key={i} className={`rounded px-2 py-1 ${color[f.tono]}`}>{f.texto}</li>
@@ -191,7 +191,7 @@ export function TablaMedidas({
   }
 
   return (
-    <table className="w-full min-w-[1380px]">
+    <table className="w-full min-w-[1500px]">
       <thead>
         <tr>
           <th className="w-6" />
@@ -206,7 +206,8 @@ export function TablaMedidas({
           <th className="th w-32">Costo total</th>
           <th className="th w-28 text-right">Costo por m²</th>
           <th className="th w-20">Markup</th>
-          <th className="th w-28 text-right">Venta</th>
+          <th className="th w-28 text-right">Venta unitaria</th>
+          <th className="th w-28 text-right">Venta total</th>
           <th className="th w-16 text-right">Margen</th>
         </tr>
       </thead>
@@ -258,7 +259,11 @@ export function TablaMedidas({
                     onCambio={(v) => setLinea(l.id, { markup: v })}
                   />
                 </td>
-                <td className="td whitespace-nowrap text-right tabular-nums">{pesos(r.venta)}</td>
+                {/* Precio de venta por pieza y total (lo que se le cotiza al cliente). */}
+                <td className="td whitespace-nowrap text-right font-semibold tabular-nums text-emerald-700">
+                  {r.venta ? pesos(Math.round((r.venta / piezasDe(l)) * 100) / 100) : "—"}
+                </td>
+                <td className="td whitespace-nowrap text-right font-semibold tabular-nums text-emerald-700">{pesos(r.venta)}</td>
                 <td className={`td whitespace-nowrap text-right tabular-nums ${r.venta > 0 && r.margenPct < params.margenMinimoPct ? "text-red-700" : ""}`}>{r.venta ? porcentaje(r.margenPct) : "—"}</td>
               </tr>
               <Comparaciones l={l} c={c} markup={r.markup} params={params} />
