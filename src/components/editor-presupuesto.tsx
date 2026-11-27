@@ -478,6 +478,7 @@ function SeccionRubro({
           <table className="w-full min-w-[1400px]">
             <thead>
               <tr>
+                <th className="w-6" />
                 <th className="th">Concepto</th>
                 <th className="th">Observaciones</th>
                 <th className="th w-28">Origen</th>
@@ -491,7 +492,6 @@ function SeccionRubro({
                 <th className="th w-20">Markup</th>
                 <th className="th w-28 text-right">Venta</th>
                 <th className="th w-16 text-right">Margen</th>
-                <th className="w-6" />
               </tr>
             </thead>
             <tbody>
@@ -499,6 +499,9 @@ function SeccionRubro({
                 const r = calc[i];
                 return (
                   <tr key={l.id} className={l.cantidad === 0 ? "bg-red-50/60" : ""}>
+                    <td className="td w-6 pr-0">
+                      {!congelado && <button type="button" className="text-zinc-400 hover:text-red-600" onClick={() => quitar(l.id)} aria-label="Quitar línea" title="Quitar línea">✕</button>}
+                    </td>
                     <td className="td">
                       <input className="input min-w-44" list={listaId} value={l.concepto} aria-label="Concepto" placeholder="Elegí o escribí" onChange={(e) => cambiarConcepto(l, e.target.value)} />
                     </td>
@@ -527,9 +530,6 @@ function SeccionRubro({
                     </td>
                     <td className="td text-right tabular-nums">{pesos(r.venta)}</td>
                     <td className={`td text-right tabular-nums ${r.venta > 0 && r.margenPct < params.margenMinimoPct ? "text-red-700" : ""}`}>{r.venta ? porcentaje(r.margenPct) : "—"}</td>
-                    <td className="td">
-                      {!congelado && <button type="button" className="text-zinc-400 hover:text-red-600" onClick={() => quitar(l.id)} aria-label="Quitar línea">✕</button>}
-                    </td>
                   </tr>
                 );
               })}

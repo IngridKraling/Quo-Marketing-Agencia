@@ -126,7 +126,7 @@ function Comparaciones({ l, c, markup, params }: { l: LineaInput; c: Comparacion
   const color = { info: "bg-zinc-100 text-zinc-700", ok: "bg-emerald-50 text-emerald-900", alerta: "bg-amber-50 text-amber-900" };
   return (
     <tr>
-      <td colSpan={13} className="px-2 pb-3 pt-0">
+      <td colSpan={13} className="px-2 pb-3 pt-0 pl-8">
         <ul className="sticky left-0 flex w-fit max-w-[min(100%,900px)] flex-col gap-1 text-xs">
           {frases.map((f, i) => (
             <li key={i} className={`rounded px-2 py-1 ${color[f.tono]}`}>{f.texto}</li>
@@ -169,6 +169,7 @@ export function TablaMedidas({
     <table className="w-full min-w-[1250px]">
       <thead>
         <tr>
+          <th className="w-6" />
           <th className="th">Concepto</th>
           <th className="th">Observaciones</th>
           <th className="th w-40">Proveedor</th>
@@ -181,7 +182,6 @@ export function TablaMedidas({
           <th className="th w-20">Markup</th>
           <th className="th w-28 text-right">Venta</th>
           <th className="th w-16 text-right">Margen</th>
-          <th className="w-6" />
         </tr>
       </thead>
       <tbody>
@@ -194,6 +194,9 @@ export function TablaMedidas({
           return (
             <Fragment key={l.id}>
               <tr className={!l.proveedor ? "bg-amber-50/60" : ""}>
+                <td className="td w-6 pr-0">
+                  {!congelado && <button type="button" className="text-zinc-400 hover:text-red-600" onClick={() => quitar(l.id)} aria-label="Quitar línea" title="Quitar línea">✕</button>}
+                </td>
                 <td className="td">
                   <input className="input min-w-44" list={listaId} value={l.concepto} aria-label="Concepto" placeholder="Elegí o escribí" onChange={(e) => cambiarConcepto(l, e.target.value)} />
                 </td>
@@ -229,9 +232,6 @@ export function TablaMedidas({
                 </td>
                 <td className="td whitespace-nowrap text-right tabular-nums">{pesos(r.venta)}</td>
                 <td className={`td whitespace-nowrap text-right tabular-nums ${r.venta > 0 && r.margenPct < params.margenMinimoPct ? "text-red-700" : ""}`}>{r.venta ? porcentaje(r.margenPct) : "—"}</td>
-                <td className="td">
-                  {!congelado && <button type="button" className="text-zinc-400 hover:text-red-600" onClick={() => quitar(l.id)} aria-label="Quitar línea">✕</button>}
-                </td>
               </tr>
               <Comparaciones l={l} c={c} markup={r.markup} params={params} />
             </Fragment>

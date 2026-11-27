@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Fragment, Suspense } from "react";
@@ -65,6 +66,7 @@ async function Vista({ params, searchParams }: { params: Promise<{ id: string }>
 
       <article className="card space-y-6 p-8 print:border-0 print:p-0">
         <header className="space-y-1">
+          <Image src="/logo-quo.png" alt="quo·marketing" width={220} height={35} priority className="mb-4" />
           <h1 className="text-2xl font-semibold">Presupuesto</h1>
           {cab.fecha_elaboracion && <p className="text-sm">Fecha: <b>{fecha(cab.fecha_elaboracion)}</b></p>}
           <p className="text-sm">Cliente: <b>{cliente}{cab.marca ? ` · ${cab.marca}` : ""}</b></p>
