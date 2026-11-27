@@ -13,8 +13,8 @@ export const aLinea = (l: LineaInput): Linea => ({
   markupConcepto: l.markup_concepto,
 });
 
-/** Las líneas que se miden por unidad no llevan horas: solo cantidad y días. */
-export const usaHoras = (unidad: string | null | undefined) => !/^unidad(es)?$/i.test((unidad ?? "").trim());
+/** Las líneas que se miden por Unidad o por Servicio no llevan horas: solo cantidad y días. */
+export const usaHoras = (unidad: string | null | undefined) => !/^(unidad(es)?|servicios?)$/i.test((unidad ?? "").trim());
 
 /** Línea nueva a partir de un concepto del catálogo (origen, proveedor, unidad, tarifa y markup). */
 export function lineaDesdeConcepto(c: Concepto, cantidad: number | null = 1): LineaInput {
