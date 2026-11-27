@@ -127,6 +127,9 @@ async function Contenido() {
             <input name="nombre" defaultValue={a.nombre} className="input w-44" aria-label="Nombre" />
             <input name="prefijo" defaultValue={a.prefijo} className="input w-20" aria-label="Prefijo" />
             <input name="orden" type="number" defaultValue={a.orden} className="input w-16" aria-label="Orden" />
+            <label className="flex items-center gap-1 text-xs" title="Un presupuesto nuevo de esta área arranca con las líneas marcadas “Por defecto” en Conceptos">
+              <input type="checkbox" name="carga_por_defecto" defaultChecked={a.carga_por_defecto} /> Conceptos por defecto
+            </label>
             <Activo valor={a.activo} />
           </FormAccion>
         ))}

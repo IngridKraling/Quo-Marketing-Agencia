@@ -6,6 +6,10 @@
 --   · markup_ref_presupuesto_id: si el markup se tomó de un presupuesto enviado antes (mismo concepto,
 --     proveedor, medidas y costo), de cuál.
 
+-- Áreas que NO cargan las líneas "por defecto" (supervisor, ayudantes…) al crear un presupuesto: Trade.
+alter table public.areas add column carga_por_defecto boolean not null default true;
+update public.areas set carga_por_defecto = false where prefijo = 'TM';
+
 alter table public.rubros add column por_medida boolean not null default false;
 
 update public.rubros

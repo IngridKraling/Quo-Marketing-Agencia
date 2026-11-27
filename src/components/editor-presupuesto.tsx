@@ -135,6 +135,21 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo, refer
   const opcionesMarca = p.marca && !marcas.includes(p.marca) ? [p.marca, ...marcas] : marcas;
   const opcionesResponsable = p.responsable && !cat.responsables.includes(p.responsable) ? [p.responsable, ...cat.responsables] : cat.responsables;
 
+  // Líneas "por defecto" con las que arrancó un presupuesto nuevo: se sacan si el área no las usa (Trade)
+  // y vuelven si se cambia a un área que sí. Solo se sacan las que siguen sin completar (cantidad 0).
+  const [porDefecto] = useState(() => (inicial.id ? [] : inicial.lineas));
+  function cambiarArea(areaId: string | null) {
+    const area = cat.areas.find((a) => a.id === areaId);
+    const ids = new Set(porDefecto.map((l) => l.id));
+    setP((prev) => {
+      if (area && !area.cargaPorDefecto) {
+        return { ...prev, area_id: areaId, lineas: prev.lineas.filter((l) => !ids.has(l.id) || l.cantidad !== 0) };
+      }
+      const faltan = porDefecto.filter((d) => !prev.lineas.some((l) => l.id === d.id));
+      return { ...prev, area_id: areaId, lineas: [...faltan, ...prev.lineas] };
+    });
+  }
+
   function cambiarCliente(clienteId: string | null) {
     setP((prev) => {
       // Si la marca elegida no es del cliente nuevo, se limpia.
@@ -212,7 +227,7 @@ export function EditorPresupuesto({ cat, inicial, estado, version, codigo, refer
               </select>
             </label>
             <label className="text-sm">Área
-              <select className="input mt-1" value={p.area_id ?? ""} onChange={(e) => set("area_id", e.target.value || null)} disabled={!!p.id}>
+              <select className="input mt-1" value={p.area_id ?? ""} onChange={(e) => cambiarArea(e.target.value || null)} disabled={!!p.id}>
                 <option value="">— Elegir —</option>
                 {cat.areas.map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
               </select>

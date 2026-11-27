@@ -401,7 +401,14 @@ export async function guardarArea(_: Resultado, form: FormData): Promise<Resulta
     .safeParse(Object.fromEntries(form));
   if (!parsed.success) return error(parsed.error.issues[0]?.message ?? "Revisá los datos");
   const { id, ...fila } = parsed.data;
-  return guardarFila("areas", id, { ...fila, activo: activoDe(form) }, "/configuracion", "Área guardada");
+  return guardarFila(
+    "areas",
+    id,
+    // En el alta (sin id) el checkbox arranca tildado.
+    { ...fila, carga_por_defecto: form.get("carga_por_defecto") != null || !id, activo: activoDe(form) },
+    "/configuracion",
+    "Área guardada",
+  );
 }
 
 export async function guardarImpuesto(_: Resultado, form: FormData): Promise<Resultado> {
